@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS templates (
   canvas_height INTEGER NOT NULL,
   image_slot_json TEXT NOT NULL,      -- {x,y,width,height}
   text_zone_json TEXT NOT NULL,       -- {x,y,width,height,align}
+  category_zone_json TEXT,            -- optional: {x,y,width,height,align} (rich-content templates)
+  description_zone_json TEXT,         -- optional: {x,y,width,height,align}
   style_json TEXT NOT NULL,           -- {fontFamily,fontColor,fontWeight,gradientDirection,gradientOpacity,...}
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))

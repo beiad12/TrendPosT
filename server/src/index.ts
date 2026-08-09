@@ -7,6 +7,7 @@ import { settingsRouter } from "./routes/settings.js";
 import { templatesRouter } from "./routes/templates.js";
 import { renderRouter } from "./routes/render.js";
 import { TEMPLATES_DIR, EXPORTS_DIR, UPLOADS_DIR } from "./middleware/upload.js";
+import { seedMarocViralTemplates } from "./services/seedTemplates.js";
 
 const app = express();
 const PORT = Number(process.env.PORT) || 4000;
@@ -33,6 +34,10 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
   res.status(err?.status ?? 500).json({ error: err?.message ?? "Internal server error" });
 });
 
-app.listen(PORT, () => {
-  console.log(`TrendPost API listening on http://localhost:${PORT}`);
-});
+seedMarocViralTemplates()
+  .catch((err) => console.error("Failed to seed Maroc Viral templates:", err))
+  .finally(() => {
+    app.listen(PORT, () => {
+      console.log(`TrendPost API listening on http://localhost:${PORT}`);
+    });
+  });

@@ -21,6 +21,7 @@ together).
 |---|---|
 | **Template & image rendering engine** | ✅ Full pipeline: photo cover-fit into a drag-defined slot, gradient overlay, auto-fit/auto-wrap headline text (Arabic + Latin aware), frame composited on top, flattened export at Facebook feed size. |
 | **Template editor UI** | ✅ Upload a frame image, drag out the image slot and text banner zones directly on the image, style controls (font color, gradient direction/opacity), save multiple named templates. |
+| **"Maroc Viral" brand template** | ✅ The brand's actual design system (colors, gradients, Cairo/Montserrat fonts, layout) implemented as a real, working template — auto-seeded on first boot in Arabic + French. Category pill + headline (`**word**` → brand-green highlight) + description, each rendered with real fonts via Pango (correct Arabic shaping, no OS font install needed). See "The Maroc Viral template" below. |
 | **Trend discovery (RSS)** | ✅ Hespress, Le360, H24Info, Akhbarona feeds parsed and normalized; tolerant of individual feed failures. |
 | **Virality scoring** | ✅ Momentum, emotional-category keyword detection, recency decay, cross-source saturation penalty → 0–100 score + human-readable explanation. |
 | **Multi-AI caption generator** | ✅ Unified router for Claude / GPT / Mistral / Gemini / Grok behind one interface; "Compare All" mode; 5 tone variants × 3 language options + hashtags + suggested post time. |
@@ -69,6 +70,36 @@ normalizes the response into a shared `CaptionResult` shape. `POST
 /api/ai/generate` with no `provider` fans this out across every configured
 provider at once ("Compare All"), returning per-provider success/failure so
 the UI can show an "add your API key" prompt for anything unconfigured.
+
+### The "Maroc Viral" template
+
+`server/src/services/render/brand.ts` holds the brand's design tokens
+(colors, gradients, layout ratios) transcribed from its design-system spec.
+`buildMarocViralFrame.ts` renders the actual frame — corner accents, logo
+wordmark, gradient-bordered content box, footer icon row — as a PNG with a
+transparent hole over the whole content area (both the photo slot and the
+text panel), so it can be composited last without ever covering dynamic
+content. `seedTemplates.ts` runs once on server boot and inserts the
+Arabic + French variants into the DB if they aren't there yet — nothing to
+configure, they just show up in the Templates list.
+
+Unlike the generic photo+gradient+headline-banner templates (drag-and-drop
+uploads), this one is a **rich-content** template: it has `categoryZone`
+and `descriptionZone` in addition to `textZone`, so the render pipeline
+renders three independent text blocks — category pill, headline, and
+description — instead of a single banner. The client detects this
+automatically (`RenderPanel.tsx`: `isRichContent = Boolean(template.categoryZone
+|| template.descriptionZone)`) and shows the extra Category/Description
+fields only when the selected template needs them.
+
+Text is rendered with **real bundled fonts** (`@fontsource/cairo` for
+Arabic, `@fontsource/montserrat` for Latin — no OS-level font install
+required, works identically on any machine) via `sharp`'s Pango-based text
+renderer (`richText.ts`), which also gives correct Arabic shaping/RTL and
+native auto-fit/auto-wrap sized to the zone — no hand-rolled width
+heuristics. Wrap a word in `**double asterisks**` in the headline to render
+it in the brand's highlight green, e.g.
+`"المغرب يواصل التقدم نحو **مستقبل أفضل!**"`.
 
 ---
 

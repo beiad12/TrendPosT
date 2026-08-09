@@ -18,6 +18,8 @@ function rowToTemplate(row: any): Template {
     canvasHeight: row.canvas_height,
     imageSlot: JSON.parse(row.image_slot_json),
     textZone: JSON.parse(row.text_zone_json),
+    categoryZone: row.category_zone_json ? JSON.parse(row.category_zone_json) : undefined,
+    descriptionZone: row.description_zone_json ? JSON.parse(row.description_zone_json) : undefined,
     style: JSON.parse(row.style_json),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -43,6 +45,10 @@ const styleSchema = z.object({
   fontWeight: z.number().optional(),
   gradientDirection: z.enum(["to-top", "to-bottom", "to-left", "to-right"]).optional(),
   gradientOpacity: z.number().min(0).max(1).optional(),
+  canvasBackground: z.string().optional(),
+  highlightColor: z.string().optional(),
+  categoryColor: z.string().optional(),
+  descriptionColor: z.string().optional(),
 });
 
 const createSchema = z.object({

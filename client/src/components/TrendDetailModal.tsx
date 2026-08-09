@@ -26,6 +26,7 @@ export default function TrendDetailModal({ trend, onClose }: { trend: Trend; onC
     Record<string, { variants: CaptionVariant[]; suggestedPostTime?: string } | { error: string }>
   >({});
   const [chosenHeadline, setChosenHeadline] = useState<string>(trend.title);
+  const [chosenDescription, setChosenDescription] = useState<string>("");
   const [step, setStep] = useState<"caption" | "render">("caption");
 
   async function handleGenerate() {
@@ -162,7 +163,9 @@ export default function TrendDetailModal({ trend, onClose }: { trend: Trend; onC
                           <button
                             className="mt-2 ml-3 text-xs underline text-neutral-400 hover:text-white"
                             onClick={() => {
-                              setChosenHeadline(v.caption.split(/[.!?\n]/)[0].slice(0, 90));
+                              const sentences = v.caption.split(/(?<=[.!?])\s+/).filter(Boolean);
+                              setChosenHeadline((sentences[0] ?? v.caption).slice(0, 90));
+                              setChosenDescription(sentences.slice(1).join(" ").slice(0, 220));
                               setStep("render");
                             }}
                           >
@@ -179,7 +182,12 @@ export default function TrendDetailModal({ trend, onClose }: { trend: Trend; onC
         )}
 
         {step === "render" && (
-          <RenderPanel initialHeadline={chosenHeadline} initialPhotoUrl={trend.imageUrl ?? ""} />
+          <RenderPanel
+            initialHeadline={chosenHeadline}
+            initialDescription={chosenDescription}
+            initialPhotoUrl={trend.imageUrl ?? ""}
+            initialCategory={trend.category}
+          />
         )}
       </div>
     </div>

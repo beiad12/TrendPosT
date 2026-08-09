@@ -22,6 +22,8 @@ function loadTemplate(id: string): Template | null {
     canvasHeight: row.canvas_height,
     imageSlot: JSON.parse(row.image_slot_json),
     textZone: JSON.parse(row.text_zone_json),
+    categoryZone: row.category_zone_json ? JSON.parse(row.category_zone_json) : undefined,
+    descriptionZone: row.description_zone_json ? JSON.parse(row.description_zone_json) : undefined,
     style: JSON.parse(row.style_json),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -31,6 +33,9 @@ function loadTemplate(id: string): Template | null {
 const bodySchema = z.object({
   templateId: z.string().uuid(),
   headline: z.string().min(1),
+  /** Optional: category pill + description paragraph, used by rich-content templates (e.g. "Maroc Viral"). */
+  category: z.string().optional(),
+  description: z.string().optional(),
   photoUrl: z.string().url().optional(),
   outputWidth: z.coerce.number().optional(),
   outputHeight: z.coerce.number().optional(),
@@ -48,7 +53,7 @@ renderRouter.post("/", uploadPhoto.single("photo"), async (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() });
   }
-  const { templateId, headline, photoUrl, outputWidth, outputHeight, format } = parsed.data;
+  const { templateId, headline, category, description, photoUrl, outputWidth, outputHeight, format } = parsed.data;
 
   const template = loadTemplate(templateId);
   if (!template) return res.status(404).json({ error: "Template not found" });
@@ -69,6 +74,8 @@ renderRouter.post("/", uploadPhoto.single("photo"), async (req, res) => {
       template,
       photo: photoInput,
       headline,
+      category,
+      description,
       outputWidth,
       outputHeight,
       format,

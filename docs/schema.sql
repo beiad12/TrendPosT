@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS templates (
   canvas_height INTEGER NOT NULL,
   image_slot_json JSONB NOT NULL,
   text_zone_json JSONB NOT NULL,
+  category_zone_json JSONB,
+  description_zone_json JSONB,
   style_json JSONB NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()

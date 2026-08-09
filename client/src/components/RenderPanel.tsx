@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api, Template } from "../lib/api.js";
 
 /**
@@ -9,13 +9,19 @@ import { api, Template } from "../lib/api.js";
 export default function RenderPanel({
   initialHeadline,
   initialPhotoUrl,
+  initialCategory,
+  initialDescription,
 }: {
   initialHeadline?: string;
   initialPhotoUrl?: string;
+  initialCategory?: string;
+  initialDescription?: string;
 }) {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [templateId, setTemplateId] = useState<string>("");
   const [headline, setHeadline] = useState(initialHeadline ?? "");
+  const [category, setCategory] = useState(initialCategory ?? "");
+  const [description, setDescription] = useState(initialDescription ?? "");
   const [photoUrl, setPhotoUrl] = useState(initialPhotoUrl ?? "");
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
@@ -29,6 +35,9 @@ export default function RenderPanel({
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const selectedTemplate = useMemo(() => templates.find((t) => t.id === templateId), [templates, templateId]);
+  const isRichContent = Boolean(selectedTemplate?.categoryZone || selectedTemplate?.descriptionZone);
 
   async function handleRender() {
     if (!templateId || !headline.trim()) {
@@ -45,6 +54,8 @@ export default function RenderPanel({
       const form = new FormData();
       form.set("templateId", templateId);
       form.set("headline", headline);
+      if (category.trim()) form.set("category", category.trim());
+      if (description.trim()) form.set("description", description.trim());
       form.set("outputWidth", "1080");
       form.set("outputHeight", "1080");
       form.set("format", "jpeg");
@@ -79,6 +90,18 @@ export default function RenderPanel({
           </select>
         </div>
 
+        {isRichContent && (
+          <div>
+            <label className="block text-sm text-neutral-400 mb-1">Category</label>
+            <input
+              className="w-full bg-neutral-900 border border-neutral-700 rounded-md px-3 py-2"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              placeholder="أخبار المغرب / ACTU MAROC"
+            />
+          </div>
+        )}
+
         <div>
           <label className="block text-sm text-neutral-400 mb-1">Headline</label>
           <textarea
@@ -86,9 +109,26 @@ export default function RenderPanel({
             rows={3}
             value={headline}
             onChange={(e) => setHeadline(e.target.value)}
-            placeholder="Auto-fit, auto-wrapped headline text…"
+            placeholder={
+              isRichContent
+                ? "Auto-fit headline… wrap a word in **double asterisks** for the brand highlight color"
+                : "Auto-fit, auto-wrapped headline text…"
+            }
           />
         </div>
+
+        {isRichContent && (
+          <div>
+            <label className="block text-sm text-neutral-400 mb-1">Description</label>
+            <textarea
+              className="w-full bg-neutral-900 border border-neutral-700 rounded-md px-3 py-2"
+              rows={3}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Short supporting paragraph shown under the headline…"
+            />
+          </div>
+        )}
 
         <div>
           <label className="block text-sm text-neutral-400 mb-1">Photo URL (from trend source)</label>

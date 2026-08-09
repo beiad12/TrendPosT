@@ -68,6 +68,10 @@ export interface TemplateStyle {
   fontWeight?: number;
   gradientDirection?: "to-top" | "to-bottom" | "to-left" | "to-right";
   gradientOpacity?: number;
+  canvasBackground?: string;
+  highlightColor?: string;
+  categoryColor?: string;
+  descriptionColor?: string;
 }
 
 export interface Template {
@@ -79,6 +83,9 @@ export interface Template {
   canvasHeight: number;
   imageSlot: Rect;
   textZone: TextZone;
+  /** Rich-content templates only (e.g. "Maroc Viral"): category pill + description paragraph zones. */
+  categoryZone?: TextZone;
+  descriptionZone?: TextZone;
   style: TemplateStyle;
   createdAt: string;
   updatedAt: string;
