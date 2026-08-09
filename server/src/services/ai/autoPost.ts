@@ -74,8 +74,8 @@ export async function generateAutoPost(req: AutoPostRequest): Promise<AutoPostRe
     template,
     values: { headline },
     photos: { photo: photoBuffer },
-    outputWidth: template.canvasWidth,
-    outputHeight: template.canvasHeight,
+    // outputWidth/outputHeight intentionally omitted -- renderPost() defaults to a
+    // 4K-scale export (see computeDefaultOutputSize) rather than the design canvas size.
     format: "jpeg",
     watermark: getWatermarkOption(),
   });

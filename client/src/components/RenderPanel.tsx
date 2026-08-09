@@ -61,8 +61,8 @@ export default function RenderPanel({
         else if (photoUrls[zone.id]?.trim()) remainingUrls[zone.id] = photoUrls[zone.id].trim();
       }
       form.set("photoUrls", JSON.stringify(remainingUrls));
-      form.set("outputWidth", String(selectedTemplate?.canvasWidth ?? 1080));
-      form.set("outputHeight", String(selectedTemplate?.canvasHeight ?? 1080));
+      // outputWidth/outputHeight intentionally omitted -- the server defaults to a
+      // 4K-scale export rather than the (much smaller) design canvas size.
       form.set("format", "jpeg");
 
       const blob = await api.render.render(form);

@@ -81,8 +81,22 @@ a fixed set of named rectangles — any template can define any number of
      (for CTA-button-style zones).
    - **locked** zones always render their fixed `defaultValue` and are not
      exposed as editable inputs in the client.
-3. The result is flattened and resized to the requested Facebook export
-   size (defaults to the template's own canvas size, e.g. 1080×1080).
+3. **Everything renders natively at final export resolution** — a template
+   is authored at a modest design-canvas size (e.g. 1080×1080, easy to
+   eyeball while building a layout), but that is never the export size.
+   Every zone's coordinates are scaled up *before* compositing, so text
+   (Pango) and SVG layers (pill, gradient) stay genuinely crisp at any
+   size, and photo zones are resampled straight from their original
+   resolution to the final pixel size — never a blurry after-the-fact
+   upscale of an already-small composite. Output defaults to a true **4K
+   export (3840px on the long edge)**, aspect-ratio preserved
+   (`computeDefaultOutputSize`); pass `outputWidth`/`outputHeight`
+   explicitly for a different size. JPEG exports use quality 95 +
+   4:4:4 chroma subsampling + mozjpeg for crisp text edges (the default
+   4:2:0 subsampling visibly softens colored text/logos). Only the
+   background artwork's own native resolution is a hard ceiling — a
+   1080px upload can't invent detail beyond 1080px, though lanczos3
+   resampling makes the most of it.
 
 `server/src/types.ts` (`ZoneDef`, `TextZoneDef`, `PhotoZoneDef`) is the
 shared shape the DB (`zones_json`), the render engine, and the client
