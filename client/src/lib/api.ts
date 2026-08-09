@@ -51,6 +51,15 @@ export interface GenerateResultEntry {
   error?: string;
 }
 
+export interface AutoPostResult {
+  headline: string;
+  caption: string;
+  hashtags: string[];
+  suggestedPostTime?: string;
+  imageBase64: string;
+  format: "jpeg" | "png";
+}
+
 export interface Rect {
   x: number;
   y: number;
@@ -113,11 +122,27 @@ export interface Template {
   updatedAt: string;
 }
 
+/**
+ * Server error responses aren't perfectly uniform (plain string `error`,
+ * `{error, message}`, `{error, detail}`, or a zod `.flatten()` shape under
+ * `error`) — this pulls out whichever field actually has the human-readable
+ * text instead of falling back to a generic label or "[object Object]".
+ */
+function extractErrorMessage(body: any, status: number): string {
+  if (typeof body?.message === "string") return body.message;
+  if (typeof body?.detail === "string") return body.detail;
+  if (typeof body?.error === "string") return body.error;
+  if (typeof body?.error?.message === "string") return body.error.message;
+  const firstFieldError = Object.values(body?.error?.fieldErrors ?? {}).flat()[0];
+  if (typeof firstFieldError === "string") return firstFieldError;
+  return `Request failed: ${status}`;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, init);
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body?.error?.message || body?.error || `Request failed: ${res.status}`);
+    throw new Error(extractErrorMessage(body, res.status));
   }
   return res.json();
 }
@@ -173,5 +198,18 @@ export const api = {
       }
       return res.blob();
     },
+  },
+  autoPost: {
+    generate: (body: {
+      trend: { title: string; summary?: string; sourceUrl: string; source: string; category?: string; imageUrl: string };
+      provider: Provider;
+      language: Language;
+      templateId?: string;
+    }) =>
+      request<AutoPostResult>("/auto-post", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }),
   },
 };

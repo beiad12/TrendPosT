@@ -39,6 +39,7 @@ export const anthropicAdapter: AiAdapter = {
         hashtags: v.hashtags ?? [],
       })),
       suggestedPostTime: parsed.suggestedPostTime,
+      headline: typeof parsed.headline === "string" ? parsed.headline : undefined,
       raw: data,
     };
   },

@@ -34,8 +34,18 @@ export interface TextZoneDef extends ZoneBase {
   pillColor?: string;
 }
 
+export interface GradientOverlay {
+  direction: "to-top" | "to-bottom" | "to-left" | "to-right";
+  opacity: number; // 0-1
+  color?: string; // default #000000
+  /** Fraction (0-1) of the zone, from the gradient's dark end, that the gradient band covers. Default 0.45. */
+  bandFraction?: number;
+}
+
 export interface PhotoZoneDef extends ZoneBase {
   type: "photo";
+  /** Darkening gradient over part of the photo (e.g. bottom third) so overlaid text stays readable. */
+  gradientOverlay?: GradientOverlay;
 }
 
 export type ZoneDef = TextZoneDef | PhotoZoneDef;

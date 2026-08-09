@@ -7,7 +7,7 @@ import { uploadTemplateImage, uploadMemory } from "../middleware/upload.js";
 import { detectTemplateZones, detectedZonesToDefs } from "../services/ai/zoneDetection.js";
 import { ProviderKeyMissingError } from "../services/ai/types.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
-import type { Template } from "../types.js";
+import { rowToTemplate, getTemplateById } from "../services/templateStore.js";
 
 export const templatesRouter = Router();
 
@@ -39,30 +39,15 @@ templatesRouter.post("/detect-zones", uploadMemory.single("file"), asyncHandler(
   }
 }));
 
-function rowToTemplate(row: any): Template {
-  return {
-    id: row.id,
-    name: row.name,
-    category: row.category,
-    baseImagePath: row.base_image_path,
-    canvasWidth: row.canvas_width,
-    canvasHeight: row.canvas_height,
-    zones: JSON.parse(row.zones_json),
-    style: JSON.parse(row.style_json),
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  };
-}
-
 templatesRouter.get("/", (_req, res) => {
   const rows = db.prepare("SELECT * FROM templates ORDER BY created_at DESC").all();
   res.json({ templates: rows.map(rowToTemplate) });
 });
 
 templatesRouter.get("/:id", (req, res) => {
-  const row = db.prepare("SELECT * FROM templates WHERE id = ?").get(req.params.id);
-  if (!row) return res.status(404).json({ error: "Template not found" });
-  res.json({ template: rowToTemplate(row) });
+  const template = getTemplateById(req.params.id);
+  if (!template) return res.status(404).json({ error: "Template not found" });
+  res.json({ template });
 });
 
 const zoneBaseSchema = z.object({
@@ -158,8 +143,8 @@ templatesRouter.post("/", uploadTemplateImage.single("file"), asyncHandler(async
     updated_at: now,
   });
 
-  const row = db.prepare("SELECT * FROM templates WHERE id = ?").get(id);
-  res.status(201).json({ template: rowToTemplate(row) });
+  const created = getTemplateById(id);
+  res.status(201).json({ template: created });
 }));
 
 const updateSchema = z.object({
@@ -170,13 +155,13 @@ const updateSchema = z.object({
 });
 
 templatesRouter.patch("/:id", (req, res) => {
-  const existing = db.prepare("SELECT * FROM templates WHERE id = ?").get(req.params.id);
+  const existing = getTemplateById(req.params.id);
   if (!existing) return res.status(404).json({ error: "Template not found" });
 
   const parsed = updateSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
-  const merged = { ...rowToTemplate(existing), ...parsed.data, updatedAt: new Date().toISOString() };
+  const merged = { ...existing, ...parsed.data, updatedAt: new Date().toISOString() };
 
   db.prepare(
     `UPDATE templates SET
@@ -193,8 +178,7 @@ templatesRouter.patch("/:id", (req, res) => {
     updated_at: merged.updatedAt,
   });
 
-  const row = db.prepare("SELECT * FROM templates WHERE id = ?").get(req.params.id);
-  res.json({ template: rowToTemplate(row) });
+  res.json({ template: getTemplateById(req.params.id) });
 });
 
 templatesRouter.delete("/:id", (req, res) => {

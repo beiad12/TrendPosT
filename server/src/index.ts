@@ -7,8 +7,9 @@ import { aiRouter } from "./routes/ai.js";
 import { settingsRouter } from "./routes/settings.js";
 import { templatesRouter } from "./routes/templates.js";
 import { renderRouter } from "./routes/render.js";
+import { autoPostRouter } from "./routes/autoPost.js";
 import { TEMPLATES_DIR, EXPORTS_DIR, UPLOADS_DIR } from "./middleware/upload.js";
-import { seedMarocViralTemplates } from "./services/seedTemplates.js";
+import { seedMarocViralTemplates, seedPressPosterTemplate } from "./services/seedTemplates.js";
 
 const app = express();
 const PORT = Number(process.env.PORT) || 4000;
@@ -28,6 +29,7 @@ app.use("/api/ai", aiRouter);
 app.use("/api/settings", settingsRouter);
 app.use("/api/templates", templatesRouter);
 app.use("/api/render", renderRouter);
+app.use("/api/auto-post", autoPostRouter);
 
 // Generic error handler (e.g. multer file-filter/size-limit rejections, or any
 // route handler's rejected promise via asyncHandler).
@@ -43,8 +45,8 @@ process.on("unhandledRejection", (reason) => {
   console.error("Unhandled promise rejection:", reason);
 });
 
-seedMarocViralTemplates()
-  .catch((err) => console.error("Failed to seed Maroc Viral templates:", err))
+Promise.all([seedMarocViralTemplates(), seedPressPosterTemplate()])
+  .catch((err) => console.error("Failed to seed default templates:", err))
   .finally(() => {
     app.listen(PORT, () => {
       console.log(`TrendPost API listening on http://localhost:${PORT}`);

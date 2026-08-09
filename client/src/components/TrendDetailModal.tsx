@@ -8,6 +8,7 @@ import {
   Trend,
 } from "../lib/api.js";
 import RenderPanel from "./RenderPanel.js";
+import AutoPostPanel from "./AutoPostPanel.js";
 
 const LANGUAGES: { value: Language; label: string }[] = [
   { value: "darija", label: "Darija" },
@@ -16,6 +17,8 @@ const LANGUAGES: { value: Language; label: string }[] = [
 ];
 
 const PROVIDERS: Provider[] = ["anthropic", "openai", "mistral", "google", "xai"];
+
+type Step = "auto" | "caption" | "render";
 
 export default function TrendDetailModal({ trend, onClose }: { trend: Trend; onClose: () => void }) {
   const [language, setLanguage] = useState<Language>("french");
@@ -27,7 +30,7 @@ export default function TrendDetailModal({ trend, onClose }: { trend: Trend; onC
   >({});
   const [chosenHeadline, setChosenHeadline] = useState<string>(trend.title);
   const [chosenDescription, setChosenDescription] = useState<string>("");
-  const [step, setStep] = useState<"caption" | "render">("caption");
+  const [step, setStep] = useState<Step>("auto");
 
   async function handleGenerate() {
     setBusy(true);
@@ -86,18 +89,26 @@ export default function TrendDetailModal({ trend, onClose }: { trend: Trend; onC
 
         <div className="flex gap-2 mb-4">
           <button
+            className={`px-3 py-1.5 rounded-md text-sm ${step === "auto" ? "bg-maroc-red" : "bg-neutral-800"}`}
+            onClick={() => setStep("auto")}
+          >
+            ✨ Auto post (AI)
+          </button>
+          <button
             className={`px-3 py-1.5 rounded-md text-sm ${step === "caption" ? "bg-maroc-red" : "bg-neutral-800"}`}
             onClick={() => setStep("caption")}
           >
-            1 · Generate caption
+            Compare captions
           </button>
           <button
             className={`px-3 py-1.5 rounded-md text-sm ${step === "render" ? "bg-maroc-red" : "bg-neutral-800"}`}
             onClick={() => setStep("render")}
           >
-            2 · Render image
+            Manual template
           </button>
         </div>
+
+        {step === "auto" && <AutoPostPanel trend={trend} />}
 
         {step === "caption" && (
           <div className="space-y-4">

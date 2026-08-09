@@ -3,6 +3,8 @@ import type { Template } from "../../types.js";
 import { isPhotoZone, isTextZone } from "../../types.js";
 import { buildHighlightMarkup, escapePango, renderRichText } from "./richText.js";
 import { buildPillSvg } from "./pill.js";
+import { buildGradientOverlaySvg } from "./gradient.js";
+import { isArabicText } from "./fonts.js";
 
 type Overlay = { input: string | Buffer; left: number; top: number };
 
@@ -59,6 +61,11 @@ export async function renderPost(opts: RenderOptions): Promise<Buffer> {
         .resize(Math.round(zone.width), Math.round(zone.height), { fit: "cover", position: "attention" })
         .toBuffer();
       composites.push({ input: photoBuffer, left: Math.round(zone.x), top: Math.round(zone.y) });
+
+      if (zone.gradientOverlay) {
+        const gradientSvg = buildGradientOverlaySvg(Math.round(zone.width), Math.round(zone.height), zone.gradientOverlay);
+        composites.push({ input: gradientSvg, left: Math.round(zone.x), top: Math.round(zone.y) });
+      }
       continue;
     }
 
@@ -77,12 +84,18 @@ export async function renderPost(opts: RenderOptions): Promise<Buffer> {
       : "";
     const markup = prefixMarkup + buildHighlightMarkup(raw, color, highlightColor);
 
+    // When a template doesn't pin a fixed alignment, follow the actual content's
+    // script (Arabic -> right, Latin -> left) instead of defaulting to left —
+    // otherwise Arabic text rendered into a template built for French (or vice
+    // versa) ends up reading in the wrong direction.
+    const align = zone.align ?? (isArabicText(raw) ? "right" : "left");
+
     const rendered = await renderRichText({
       text: markup,
       isMarkup: true,
       weight: zone.weight ?? "regular",
       box: { width: Math.round(zone.width), height: Math.round(zone.height) },
-      align: zone.align ?? "left",
+      align,
     });
 
     if (zone.pill) {
@@ -94,9 +107,9 @@ export async function renderPost(opts: RenderOptions): Promise<Buffer> {
       const pillW = rendered.width + padX * 2;
       const pillH = rendered.height + padY * 2;
       const anchorLeft =
-        zone.align === "right"
+        align === "right"
           ? zone.x + zone.width - pillW
-          : zone.align === "center"
+          : align === "center"
           ? zone.x + (zone.width - pillW) / 2
           : zone.x;
 

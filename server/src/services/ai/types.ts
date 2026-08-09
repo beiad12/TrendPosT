@@ -36,6 +36,8 @@ export interface CaptionResult {
   model: string;
   variants: CaptionVariant[];
   suggestedPostTime?: string;
+  /** A short, punchy poster headline distinct from the full captions — may contain `**highlight**` markup. */
+  headline?: string;
   raw?: unknown;
 }
 

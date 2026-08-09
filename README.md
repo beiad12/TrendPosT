@@ -19,6 +19,7 @@ together).
 
 | Module | Status |
 |---|---|
+| **AI Auto Post (one click, nothing manual)** | ✅ `POST /api/auto-post` — pick a trend, and the AI does everything: fetches the trend's own photo, writes a punchy headline for it, and renders the two together onto a full-bleed "press poster" template (photo + gradient + headline, no manual upload or typing). Shown as the default tab whenever you open a trend. See "AI Auto Post" below. |
 | **Template & image rendering engine** | ✅ Layer-based: any number of text/photo zones, each with its own alignment/weight/color, composited on top of a **locked, pixel-perfect background artwork** — your upload never needs any special transparency to work. `**word**` → per-zone highlight color, auto-fit/auto-wrap via real font metrics (Pango), correct Arabic shaping (Cairo) and Latin (Montserrat), flattened export at Facebook feed size. |
 | **Template editor UI** | ✅ Upload any PNG/JPG as the background, add as many text or photo zones as your design needs, drag each into place, configure per-zone alignment/weight/color/highlight-color/locked/default-value/pill-background. Not hardcoded to any fixed shape — a "Quick add" preset just pre-fills the common Photo/Category/Headline/Description/CTA set. |
 | **AI zone detection** | ✅ "✨ Auto-detect zones with AI" — Claude's vision looks at your uploaded artwork and proposes a starting set of zones (photo + text placeholders, with type/alignment inferred) instead of dragging every rectangle by hand; you review/adjust before saving. Requires an Anthropic key in Settings. |
@@ -90,6 +91,34 @@ normalizes the response into a shared `CaptionResult` shape. `POST
 /api/ai/generate` with no `provider` fans this out across every configured
 provider at once ("Compare All"), returning per-provider success/failure so
 the UI can show an "add your API key" prompt for anything unconfigured.
+
+### AI Auto Post (`server/src/services/ai/autoPost.ts`)
+
+The one-click pipeline: `POST /api/auto-post` takes `{trend: {..., imageUrl}, provider, language}`
+and does the rest itself —
+
+1. Fetches the trend's own photo from `trend.imageUrl` server-side (no manual upload).
+2. Asks the AI for a punchy headline (the same `generateCaptions` call used elsewhere
+   also now returns a dedicated `headline` field — see `promptBuilder.ts` — so this
+   reuses the existing provider adapters rather than adding a second AI-calling path).
+3. Renders the photo + headline onto the seeded **"AI Auto Post — Photo + Headline"**
+   template (`buildPressPosterFrame.ts`): full-bleed photo, a darkening gradient over
+   the bottom for readability (`PhotoZoneDef.gradientOverlay`, using the generic zone
+   system — no template-specific code), headline on top. The headline zone has no
+   fixed `align`; the render engine auto-detects the text's script (Arabic → right,
+   Latin → left) instead, so the same template works for any language the AI writes in.
+4. Returns the rendered image (base64) together with a full caption + hashtags +
+   suggested post time from the same AI call, in one response.
+
+The photo and text fetches run concurrently (`Promise.allSettled`, not raced) so that
+if both happen to fail, the reported error explains both reasons instead of only
+whichever rejected first. A trend with no captured photo is rejected with a clear
+400 before any AI call is made.
+
+This is the default tab whenever you open a trend in the dashboard — the "Compare
+captions" and "Manual template" tabs (multi-provider caption comparison, and the full
+zone editor covered below) are still there for anyone who wants more control, but
+nothing is required beyond picking a trend and clicking generate.
 
 ### AI zone detection (`server/src/services/ai/zoneDetection.ts`)
 
@@ -183,13 +212,15 @@ npm run dev           # http://localhost:5173 (proxies /api and /static to :4000
 ```
 
 Then open http://localhost:5173:
-1. **Settings** — paste API key(s) for whichever AI providers you have.
-2. **Templates** — upload your branded artwork, then click "✨ Auto-detect
-   zones with AI" (needs an Anthropic key from step 1) to have Claude
-   propose a starting layout, or add zones manually / use the Maroc Viral
-   quick-add preset. Adjust as needed and save.
-3. **Dashboard** — trending topics (once RSS feeds are reachable from your
-   network) → generate captions → render onto your template → download.
+1. **Settings** — paste API key(s) for whichever AI providers you have (Anthropic
+   is needed for AI Auto Post and AI zone detection specifically).
+2. **Dashboard** — click a trend (once RSS feeds are reachable from your network) →
+   it opens on **"✨ Auto post (AI)"** → click **"Generate AI post"** → the trend's
+   photo + an AI-written headline render automatically → download. No manual steps.
+3. *(Optional)* **Templates** — upload your own branded artwork if you want a
+   different look than the built-in ones, then click "✨ Auto-detect zones with AI"
+   to have Claude propose a starting layout, or add zones manually / use the
+   Maroc Viral quick-add preset.
 
 ### Running tests
 

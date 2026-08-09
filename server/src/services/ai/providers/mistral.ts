@@ -40,6 +40,7 @@ export const mistralAdapter: AiAdapter = {
         hashtags: v.hashtags ?? [],
       })),
       suggestedPostTime: parsed.suggestedPostTime,
+      headline: typeof parsed.headline === "string" ? parsed.headline : undefined,
       raw: data,
     };
   },

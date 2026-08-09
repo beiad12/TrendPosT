@@ -43,11 +43,16 @@ For each variant include:
 
 Also include:
 - "suggestedPostTime": a short human-readable suggestion (e.g. "Today 19:00-21:00, peak Moroccan FB engagement")
+- "headline": ONE short, punchy news-poster headline for this trend (distinct from the captions above) —
+  max ~90 characters, in the target language, suitable for overlaying on a photo. Wrap the single most
+  attention-grabbing word or short phrase in it with **double asterisks** (used for a highlight color),
+  e.g. "المغرب يواصل التقدم نحو **مستقبل أفضل!**" or "Le Maroc mise sur l'innovation pour un **avenir plus fort**".
 
 Respond with STRICT JSON only, matching exactly:
 {
   "variants": [ { "tone": string, "caption": string, "hashtags": string[] } ],
-  "suggestedPostTime": string
+  "suggestedPostTime": string,
+  "headline": string
 }`;
 }
 
