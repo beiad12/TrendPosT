@@ -245,27 +245,36 @@ pre-loaded with it for testing that swap.
 
 ## Trend sources
 
-`server/src/services/trends/aggregator.ts` combines three independent,
-free/no-API-key sources into one ranked feed (`fetchAllTrends()`):
+`server/src/services/trends/aggregator.ts` fans out to every configured
+source and combines them into one ranked feed (`fetchAllTrends()`) —
+covering Moroccan news, worldwide trending topics, and what's going viral
+right now, not just one country's headlines:
 
-| Source | Module | Notes |
+| Source | Module | Covers |
 |---|---|---|
-| Moroccan news RSS | `rssService.ts` (feed list in `sources.ts`) | Hespress, Le360, H24Info, Akhbarona. Outlets occasionally restructure their sites — verify feed URLs periodically. |
-| Google Trends (Morocco) | `sources/googleTrends.ts` | `trends.google.com/trends/trendingsearches/daily/rss?geo=MA` — Google's own daily trending list, no key required. |
-| Reddit r/Morocco | `sources/reddit.ts` | Public `hot.json` listing (read-only, no OAuth needed for a subreddit's public posts). |
+| Moroccan news RSS | `rssService.ts` (feed list in `sources.ts`) | Hespress (FR+AR), Le360, H24Info, Akhbarona — Morocco's own news cycle. |
+| Google Trends — Morocco, Worldwide (US), France | `sources/googleTrends.ts` (`GOOGLE_TRENDS_GEOS`) | Google's daily trending-searches RSS is per-country (there's no single "global" geo code), so `GOOGLE_TRENDS_GEOS` fans out across MA + a couple of the world's highest-traffic geos as a free "what's trending in the world" proxy. Add more geo codes to that array to cover more countries. |
+| Reddit r/Morocco + r/popular | `sources/reddit.ts` (`REDDIT_SOURCES`) | r/Morocco for local discussion, **r/popular** — Reddit's own cross-site "hot right now" front page — as the free "what's going viral" signal. |
 
 Each source is fetched independently (`Promise.allSettled`) so one being down
-just means fewer results, not a failed request. Cross-source duplicate
-titles feed into the same corroboration/saturation scoring as before — a
-story trending on Google *and* covered by two outlets *and* posted to Reddit
-scores its corroboration bonus once, across all three, not per-source.
+just means fewer results, not a failed request — and **every failure is
+logged to the server console** as `[trends] source "<name>" failed: <reason>`
+(and `[trends] RSS feed "<name>" failed: <reason>` for individual RSS
+outlets), so if a source ever goes quiet on your dashboard, check the server
+console first; it names exactly which source and why (HTTP status, DNS
+failure, timeout, etc.) instead of silently vanishing from the list.
+
+Cross-source duplicate titles feed into the same corroboration/saturation
+scoring as before — a story trending on Google *and* covered by two outlets
+*and* posted to Reddit scores its corroboration bonus once, across all
+sources, not per-source.
 
 Adding a new source: write a module returning
-`Omit<NormalizedTrend, "score" | "scoreExplanation">[]` (see the two
-examples above) and add it to the `Promise.allSettled` list in
-`aggregator.ts`. X/Twitter's trending-topics data needs a paid API tier —
-there's no free public endpoint for it — so it's documented as the next
-extension point there rather than faked.
+`Omit<NormalizedTrend, "score" | "scoreExplanation">[]` (see the examples
+above) and add it to the `buildFetchers()` list in `aggregator.ts`.
+X/Twitter's trending-topics data needs a paid API tier — there's no free
+public endpoint for it — so it's documented as the next extension point
+there rather than faked.
 
 ## Page logo
 

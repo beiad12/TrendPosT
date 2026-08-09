@@ -38,9 +38,14 @@ export async function fetchRssTrends(): Promise<Omit<NormalizedTrend, "score" | 
     })
   );
 
-  const flat = results
-    .filter((r): r is PromiseFulfilledResult<any[]> => r.status === "fulfilled")
-    .flatMap((r) => r.value);
+  const flat: { source: (typeof RSS_SOURCES)[number]; item: any }[] = [];
+  results.forEach((r, i) => {
+    if (r.status === "fulfilled") {
+      flat.push(...r.value);
+    } else {
+      console.error(`[trends] RSS feed "${RSS_SOURCES[i].name}" failed:`, r.reason?.message ?? r.reason);
+    }
+  });
 
   return flat.map(({ source, item }) => {
     const publishedAt = item.isoDate ? new Date(item.isoDate) : item.pubDate ? new Date(item.pubDate) : null;

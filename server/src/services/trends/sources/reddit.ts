@@ -1,7 +1,22 @@
 import { randomUUID } from "node:crypto";
 import type { NormalizedTrend } from "../types.js";
 
-const REDDIT_MOROCCO_HOT = "https://www.reddit.com/r/Morocco/hot.json?limit=25";
+export interface RedditSource {
+  subreddit: string;
+  label: string;
+  language: string;
+}
+
+/**
+ * r/Morocco covers what Moroccans themselves are discussing; r/popular is
+ * Reddit's own cross-site "what's hot right now" front page (no single
+ * subreddit, aggregated across all of Reddit) -- the closest free,
+ * no-API-key signal for "what's going viral worldwide" that Reddit exposes.
+ */
+export const REDDIT_SOURCES: RedditSource[] = [
+  { subreddit: "Morocco", label: "Reddit r/Morocco", language: "fr" },
+  { subreddit: "popular", label: "Reddit r/popular (worldwide)", language: "en" },
+];
 
 interface RedditPost {
   title: string;
@@ -12,6 +27,7 @@ interface RedditPost {
   preview?: { images?: { source?: { url?: string } }[] };
   link_flair_text?: string | null;
   is_self: boolean;
+  subreddit?: string;
 }
 
 function extractImage(post: RedditPost): string | null {
@@ -23,26 +39,29 @@ function extractImage(post: RedditPost): string | null {
 }
 
 /**
- * Free, no-API-key feed: r/Morocco's hot listing via Reddit's public JSON
- * endpoint (no OAuth needed for read-only access to a subreddit's public
+ * Free, no-API-key feed: a subreddit's "hot" listing via Reddit's public
+ * JSON endpoint (no OAuth needed for read-only access to a public
  * listing). Reddit requires a descriptive User-Agent or it 429s.
  */
-export async function fetchRedditTrends(): Promise<Omit<NormalizedTrend, "score" | "scoreExplanation">[]> {
-  const resp = await fetch(REDDIT_MOROCCO_HOT, {
+export async function fetchRedditTrends(
+  source: RedditSource
+): Promise<Omit<NormalizedTrend, "score" | "scoreExplanation">[]> {
+  const url = `https://www.reddit.com/r/${source.subreddit}/hot.json?limit=25`;
+  const resp = await fetch(url, {
     headers: { "User-Agent": "TrendPostBot/1.0 (+https://github.com/beiad12/trendpost)" },
   });
-  if (!resp.ok) throw new Error(`Reddit fetch failed (${resp.status})`);
+  if (!resp.ok) throw new Error(`${source.label} fetch failed (${resp.status})`);
   const body = (await resp.json()) as { data?: { children?: { data: RedditPost }[] } };
   const posts = body.data?.children?.map((c) => c.data) ?? [];
 
   return posts.map((post) => ({
     id: randomUUID(),
-    source: "Reddit r/Morocco",
+    source: source.label,
     title: post.title ?? "(untitled)",
     url: `https://www.reddit.com${post.permalink}`,
     imageUrl: extractImage(post),
     publishedAt: post.created_utc ? new Date(post.created_utc * 1000).toISOString() : null,
-    language: "fr",
-    category: post.link_flair_text ?? "general",
+    language: source.language,
+    category: post.link_flair_text ?? (post.subreddit ? `r/${post.subreddit}` : "general"),
   }));
 }
