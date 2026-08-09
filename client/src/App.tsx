@@ -2,6 +2,7 @@ import { NavLink, Route, Routes } from "react-router-dom";
 import Dashboard from "./pages/Dashboard.js";
 import Templates from "./pages/Templates.js";
 import Settings from "./pages/Settings.js";
+import InstallButton from "./components/InstallButton.js";
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   `px-3 py-2 rounded-md text-sm font-medium ${
@@ -18,7 +19,7 @@ export default function App() {
             <span className="font-bold text-lg">Maroc Viral</span>
             <span className="text-neutral-500 text-sm hidden sm:inline">/ TrendPost</span>
           </div>
-          <nav className="flex gap-1">
+          <nav className="flex gap-1 items-center">
             <NavLink to="/" end className={navLinkClass}>
               Dashboard
             </NavLink>
@@ -28,6 +29,7 @@ export default function App() {
             <NavLink to="/settings" className={navLinkClass}>
               Settings
             </NavLink>
+            <InstallButton />
           </nav>
         </div>
       </header>
