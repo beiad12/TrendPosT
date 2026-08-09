@@ -1,0 +1,19 @@
+# Optional production Postgres, matching docs/schema.sql.
+# The bundled dev server runs on SQLite with zero setup — this compose file
+# is only needed when running TrendPost against Postgres (see README "Production DB").
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: trendpost
+      POSTGRES_PASSWORD: trendpost
+      POSTGRES_DB: trendpost
+    ports:
+      - "5432:5432"
+    volumes:
+      - trendpost_pg_data:/var/lib/postgresql/data
+      - ./docs/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+
+volumes:
+  trendpost_pg_data:

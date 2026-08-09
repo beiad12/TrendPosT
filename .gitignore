@@ -1,0 +1,14 @@
+node_modules/
+dist/
+build/
+.env
+.env.local
+*.log
+
+# server dev data (sqlite db + uploaded templates/exports)
+server/data/
+
+# editor/OS
+.DS_Store
+.vscode/
+.idea/
