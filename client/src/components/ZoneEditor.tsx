@@ -1,30 +1,34 @@
 import { useRef, useState } from "react";
 import type { Rect } from "../lib/api.js";
 
-type Mode = "image-slot" | "text-zone";
+export interface EditorZone {
+  id: string;
+  label: string;
+  rect: Rect | null;
+  color: string; // any valid CSS color, used for border/label/drag-preview
+}
 
 /**
  * Drag-to-define zone editor. Renders the uploaded template image at display
- * size, lets the user drag out a rectangle, and reports it back scaled to
- * the image's natural (full) resolution — which is what the render engine
- * operates in.
+ * size, lets the user drag out a rectangle for whichever zone is currently
+ * active, and reports it back scaled to the image's natural (full)
+ * resolution — which is what the render engine operates in. Works with any
+ * number of zones (not a fixed set), each carrying its own display color.
  */
 export default function ZoneEditor({
   imageUrl,
   naturalWidth,
   naturalHeight,
-  imageSlot,
-  textZone,
-  mode,
+  zones,
+  activeZoneId,
   onChange,
 }: {
   imageUrl: string;
   naturalWidth: number;
   naturalHeight: number;
-  imageSlot: Rect | null;
-  textZone: Rect | null;
-  mode: Mode;
-  onChange: (mode: Mode, rect: Rect) => void;
+  zones: EditorZone[];
+  activeZoneId: string | null;
+  onChange: (zoneId: string, rect: Rect) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
@@ -53,6 +57,7 @@ export default function ZoneEditor({
   }
 
   function handleMouseDown(e: React.MouseEvent) {
+    if (!activeZoneId) return;
     const rect = containerRef.current!.getBoundingClientRect();
     setDragStart({ x: e.clientX - rect.left, y: e.clientY - rect.top });
     setDragRect(null);
@@ -72,20 +77,24 @@ export default function ZoneEditor({
   }
 
   function handleMouseUp() {
-    if (dragRect && containerRef.current) {
+    if (dragRect && containerRef.current && activeZoneId) {
       const { clientWidth, clientHeight } = containerRef.current;
       if (dragRect.width > 8 && dragRect.height > 8) {
-        onChange(mode, toNatural(dragRect, clientWidth, clientHeight));
+        onChange(activeZoneId, toNatural(dragRect, clientWidth, clientHeight));
       }
     }
     setDragStart(null);
     setDragRect(null);
   }
 
+  const activeColor = zones.find((z) => z.id === activeZoneId)?.color ?? "#38bdf8";
+
   return (
     <div
       ref={containerRef}
-      className="relative select-none border border-neutral-700 rounded-md overflow-hidden cursor-crosshair"
+      className={`relative select-none border border-neutral-700 rounded-md overflow-hidden ${
+        activeZoneId ? "cursor-crosshair" : "cursor-default"
+      }`}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
@@ -97,40 +106,45 @@ export default function ZoneEditor({
       <img src={imageUrl} alt="Template" className="w-full block pointer-events-none" draggable={false} />
 
       {containerRef.current &&
-        imageSlot &&
-        (() => {
-          const d = toDisplay(imageSlot, containerRef.current.clientWidth, containerRef.current.clientHeight);
+        zones.map((zone) => {
+          if (!zone.rect) return null;
+          const d = toDisplay(zone.rect, containerRef.current!.clientWidth, containerRef.current!.clientHeight);
+          const isActive = zone.id === activeZoneId;
           return (
             <div
-              className="absolute border-2 border-emerald-400 bg-emerald-400/10"
-              style={{ left: d.x, top: d.y, width: d.width, height: d.height }}
+              key={zone.id}
+              className="absolute"
+              style={{
+                left: d.x,
+                top: d.y,
+                width: d.width,
+                height: d.height,
+                border: `2px solid ${zone.color}`,
+                backgroundColor: `${zone.color}1a`,
+                boxShadow: isActive ? `0 0 0 2px ${zone.color}` : undefined,
+              }}
             >
-              <span className="absolute -top-5 left-0 text-[10px] text-emerald-400">image slot</span>
+              <span
+                className="absolute -top-5 left-0 text-[10px] font-medium"
+                style={{ color: zone.color }}
+              >
+                {zone.label}
+              </span>
             </div>
           );
-        })()}
-
-      {containerRef.current &&
-        textZone &&
-        (() => {
-          const d = toDisplay(textZone, containerRef.current.clientWidth, containerRef.current.clientHeight);
-          return (
-            <div
-              className="absolute border-2 border-sky-400 bg-sky-400/10"
-              style={{ left: d.x, top: d.y, width: d.width, height: d.height }}
-            >
-              <span className="absolute -top-5 left-0 text-[10px] text-sky-400">text banner</span>
-            </div>
-          );
-        })()}
+        })}
 
       {dragRect && (
         <div
-          className={`absolute border-2 border-dashed ${
-            mode === "image-slot" ? "border-emerald-300" : "border-sky-300"
-          }`}
-          style={{ left: dragRect.x, top: dragRect.y, width: dragRect.width, height: dragRect.height }}
+          className="absolute border-2 border-dashed"
+          style={{ left: dragRect.x, top: dragRect.y, width: dragRect.width, height: dragRect.height, borderColor: activeColor }}
         />
+      )}
+
+      {!activeZoneId && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/40 text-sm text-neutral-200 pointer-events-none">
+          Select a zone below, then drag on the image to place it
+        </div>
       )}
     </div>
   );

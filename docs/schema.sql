@@ -8,14 +8,11 @@ CREATE TABLE IF NOT EXISTS templates (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   category TEXT DEFAULT 'news',
-  base_image_path TEXT NOT NULL,
+  base_image_path TEXT NOT NULL,   -- locked, pixel-perfect background artwork (bottom layer)
   canvas_width INTEGER NOT NULL,
   canvas_height INTEGER NOT NULL,
-  image_slot_json JSONB NOT NULL,
-  text_zone_json JSONB NOT NULL,
-  category_zone_json JSONB,
-  description_zone_json JSONB,
-  style_json JSONB NOT NULL,
+  zones_json JSONB NOT NULL,       -- ZoneDef[] -- reusable layer system (text/photo zones, any count)
+  style_json JSONB NOT NULL,       -- {canvasBackground?}
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

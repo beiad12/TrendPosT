@@ -4,26 +4,16 @@ import { renderPost } from "./renderEngine.js";
 import type { Template } from "../../types.js";
 
 describe("renderPost", () => {
-  it("composites photo + gradient + auto-fit headline + frame into a flattened export", async () => {
-    // Frame: opaque red border with a transparent hole in the middle (the "slot").
+  it("composites background artwork + photo zone + text zones (with highlight) into a flattened export", async () => {
     const canvasWidth = 800;
     const canvasHeight = 800;
-    const slot = { x: 40, y: 40, width: 720, height: 720 };
+    const photoZoneRect = { x: 40, y: 40, width: 720, height: 400 };
 
-    const frame = await sharp({
+    // Locked background artwork: a simple opaque red frame (no transparency needed —
+    // zones composite strictly on top of it regardless).
+    const background = await sharp({
       create: { width: canvasWidth, height: canvasHeight, channels: 4, background: { r: 200, g: 30, b: 30, alpha: 1 } },
     })
-      .composite([
-        {
-          input: await sharp({
-            create: { width: slot.width, height: slot.height, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
-          })
-            .png()
-            .toBuffer(),
-          left: slot.x,
-          top: slot.y,
-        },
-      ])
       .png()
       .toBuffer();
 
@@ -37,23 +27,49 @@ describe("renderPost", () => {
       id: "test-template",
       name: "Test",
       category: "news",
-      baseImagePath: undefined as any, // replaced below with the in-memory frame via Buffer path support
+      baseImagePath: background as any, // sharp's `input` accepts Buffers too
       canvasWidth,
       canvasHeight,
-      imageSlot: slot,
-      textZone: { x: 60, y: 500, width: 680, height: 220, align: "left" },
-      style: { fontColor: "#ffffff", gradientDirection: "to-top", gradientOpacity: 0.7 },
+      zones: [
+        { id: "photo", label: "Photo", type: "photo", ...photoZoneRect },
+        {
+          id: "headline",
+          label: "Headline",
+          type: "text",
+          x: 60,
+          y: 500,
+          width: 680,
+          height: 220,
+          align: "left",
+          weight: "extrabold",
+          color: "#ffffff",
+          highlightColor: "#39FF14",
+        },
+        {
+          id: "cta",
+          label: "CTA",
+          type: "text",
+          x: 60,
+          y: 730,
+          width: 300,
+          height: 44,
+          align: "left",
+          weight: "bold",
+          color: "#39FF14",
+          pill: true,
+          locked: true,
+          defaultValue: "Lire la suite",
+        },
+      ],
+      style: {},
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
-    // renderEngine composites baseImagePath directly via sharp's `input`, which accepts Buffers too.
-    (template as any).baseImagePath = frame;
-
     const output = await renderPost({
       template,
-      photo,
-      headline: "Titre très long qui doit se replier automatiquement sur deux lignes maximum",
+      photos: { photo },
+      values: { headline: "Titre très long qui doit se replier automatiquement sur **deux lignes**" },
       outputWidth: 1080,
       outputHeight: 1080,
       format: "jpeg",

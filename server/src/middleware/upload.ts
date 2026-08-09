@@ -40,3 +40,14 @@ export const uploadPhoto = multer({
   fileFilter: imageFileFilter,
   limits: { fileSize: 15 * 1024 * 1024 },
 });
+
+/**
+ * Accepts any number of file fields under arbitrary names — used for
+ * per-zone photo uploads, where each photo zone's field name is that
+ * zone's id (a template can define any number of photo zones).
+ */
+export const uploadAnyPhotos = multer({
+  storage: makeStorage(UPLOADS_DIR),
+  fileFilter: imageFileFilter,
+  limits: { fileSize: 15 * 1024 * 1024, files: 10 },
+}).any();

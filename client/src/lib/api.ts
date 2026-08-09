@@ -58,34 +58,57 @@ export interface Rect {
   height: number;
 }
 
-export interface TextZone extends Rect {
-  align?: "left" | "center" | "right";
+export type ZoneAlign = "left" | "center" | "right";
+export type FontWeight = "regular" | "bold" | "extrabold";
+
+interface ZoneBase extends Rect {
+  id: string;
+  label: string;
+  /** Locked zones always render defaultValue and aren't shown as editable inputs. */
+  locked?: boolean;
+}
+
+export interface TextZoneDef extends ZoneBase {
+  type: "text";
+  align?: ZoneAlign;
+  weight?: FontWeight;
+  color?: string;
+  highlightColor?: string;
+  maxLines?: number;
+  defaultValue?: string;
+  prefix?: string;
+  pill?: boolean;
+  pillColor?: string;
+}
+
+export interface PhotoZoneDef extends ZoneBase {
+  type: "photo";
+}
+
+export type ZoneDef = TextZoneDef | PhotoZoneDef;
+
+export function isTextZone(z: ZoneDef): z is TextZoneDef {
+  return z.type === "text";
+}
+
+export function isPhotoZone(z: ZoneDef): z is PhotoZoneDef {
+  return z.type === "photo";
 }
 
 export interface TemplateStyle {
-  fontFamily?: string;
-  fontColor?: string;
-  fontWeight?: number;
-  gradientDirection?: "to-top" | "to-bottom" | "to-left" | "to-right";
-  gradientOpacity?: number;
   canvasBackground?: string;
-  highlightColor?: string;
-  categoryColor?: string;
-  descriptionColor?: string;
 }
 
 export interface Template {
   id: string;
   name: string;
   category: string;
+  /** Locked, pixel-perfect background artwork — every zone composites on top of it. */
   baseImagePath: string;
   canvasWidth: number;
   canvasHeight: number;
-  imageSlot: Rect;
-  textZone: TextZone;
-  /** Rich-content templates only (e.g. "Maroc Viral"): category pill + description paragraph zones. */
-  categoryZone?: TextZone;
-  descriptionZone?: TextZone;
+  /** Reusable layer system: any number of text/photo zones, in paint order. */
+  zones: ZoneDef[];
   style: TemplateStyle;
   createdAt: string;
   updatedAt: string;

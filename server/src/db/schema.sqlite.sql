@@ -4,14 +4,11 @@ CREATE TABLE IF NOT EXISTS templates (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   category TEXT DEFAULT 'news',
-  base_image_path TEXT NOT NULL,
+  base_image_path TEXT NOT NULL,     -- locked, pixel-perfect background artwork (bottom layer)
   canvas_width INTEGER NOT NULL,
   canvas_height INTEGER NOT NULL,
-  image_slot_json TEXT NOT NULL,      -- {x,y,width,height}
-  text_zone_json TEXT NOT NULL,       -- {x,y,width,height,align}
-  category_zone_json TEXT,            -- optional: {x,y,width,height,align} (rich-content templates)
-  description_zone_json TEXT,         -- optional: {x,y,width,height,align}
-  style_json TEXT NOT NULL,           -- {fontFamily,fontColor,fontWeight,gradientDirection,gradientOpacity,...}
+  zones_json TEXT NOT NULL,          -- ZoneDef[] -- reusable layer system (text/photo zones, any count)
+  style_json TEXT NOT NULL,          -- {canvasBackground?}
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );

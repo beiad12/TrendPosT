@@ -183,10 +183,8 @@ export default function TrendDetailModal({ trend, onClose }: { trend: Trend; onC
 
         {step === "render" && (
           <RenderPanel
-            initialHeadline={chosenHeadline}
-            initialDescription={chosenDescription}
-            initialPhotoUrl={trend.imageUrl ?? ""}
-            initialCategory={trend.category}
+            initialValues={{ headline: chosenHeadline, description: chosenDescription, category: trend.category }}
+            initialPhotoUrls={{ photo: trend.imageUrl ?? "" }}
           />
         )}
       </div>

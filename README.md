@@ -19,9 +19,9 @@ together).
 
 | Module | Status |
 |---|---|
-| **Template & image rendering engine** | ✅ Full pipeline: photo cover-fit into a drag-defined slot, gradient overlay, auto-fit/auto-wrap headline text (Arabic + Latin aware), frame composited on top, flattened export at Facebook feed size. |
-| **Template editor UI** | ✅ Upload a frame image, drag out the image slot and text banner zones directly on the image, style controls (font color, gradient direction/opacity), save multiple named templates. |
-| **"Maroc Viral" brand template** | ✅ The brand's actual design system (colors, gradients, Cairo/Montserrat fonts, layout) implemented as a real, working template — auto-seeded on first boot in Arabic + French. Category pill + headline (`**word**` → brand-green highlight) + description, each rendered with real fonts via Pango (correct Arabic shaping, no OS font install needed). See "The Maroc Viral template" below. |
+| **Template & image rendering engine** | ✅ Layer-based: any number of text/photo zones, each with its own alignment/weight/color, composited on top of a **locked, pixel-perfect background artwork** — your upload never needs any special transparency to work. `**word**` → per-zone highlight color, auto-fit/auto-wrap via real font metrics (Pango), correct Arabic shaping (Cairo) and Latin (Montserrat), flattened export at Facebook feed size. |
+| **Template editor UI** | ✅ Upload any PNG/JPG as the background, add as many text or photo zones as your design needs, drag each into place, configure per-zone alignment/weight/color/highlight-color/locked/default-value/pill-background. Not hardcoded to any fixed shape — a "Quick add" preset just pre-fills the common Photo/Category/Headline/Description/CTA set. |
+| **"Maroc Viral" brand template** | ✅ The brand's actual design system (colors, gradients, Cairo/Montserrat fonts, layout) implemented as a real, working 5-zone template (Photo, Category, Headline, Description, CTA) — auto-seeded on first boot in Arabic + French. See "The Maroc Viral template" below. |
 | **Trend discovery (RSS)** | ✅ Hespress, Le360, H24Info, Akhbarona feeds parsed and normalized; tolerant of individual feed failures. |
 | **Virality scoring** | ✅ Momentum, emotional-category keyword detection, recency decay, cross-source saturation penalty → 0–100 score + human-readable explanation. |
 | **Multi-AI caption generator** | ✅ Unified router for Claude / GPT / Mistral / Gemini / Grok behind one interface; "Compare All" mode; 5 tone variants × 3 language options + hashtags + suggested post time. |
@@ -53,14 +53,33 @@ docs/
 
 ### Rendering pipeline (`server/src/services/render/renderEngine.ts`)
 
-1. Photo is cover-fit and cropped to the template's **image slot** rectangle.
-2. A gradient overlay + the headline are rendered as one SVG layer over the
-   **text zone** rectangle. Headline auto-sizes and wraps to 1–2 lines
-   (`textFit.ts`), with a wider glyph-width heuristic for Arabic script.
-3. The template's base frame image is composited **last**, on top — so
-   border/branding elements stay crisp over the photo, per spec.
-4. The result is flattened and resized to the requested Facebook export
-   size (defaults to 1080×1080).
+Templates are a **reusable layer system** (`Template.zones: ZoneDef[]`), not
+a fixed set of named rectangles — any template can define any number of
+`text` or `photo` zones:
+
+1. The uploaded background artwork is composited **pixel-perfect as the
+   bottom layer** — it is never expected to have real alpha transparency; a
+   fully flattened PNG/JPG export from any design tool works, because every
+   zone below draws strictly **on top** of it.
+2. Each zone, in the template's defined paint order, is composited on top:
+   - **photo zones** are cover-fit + cropped to their box.
+   - **text zones** are rendered with real brand fonts — Cairo for Arabic,
+     Montserrat for Latin, auto-picked per zone from the actual content's
+     script — via `sharp`'s Pango-based text renderer (`richText.ts`), with
+     native auto-fit/auto-wrap sized to the zone (real font metrics, no
+     hand-rolled width heuristics), `**word**` → per-zone highlight color,
+     an optional fixed `prefix` (e.g. a "●" category dot), and an optional
+     auto-width **pill** background that hugs the actual rendered text size
+     (for CTA-button-style zones).
+   - **locked** zones always render their fixed `defaultValue` and are not
+     exposed as editable inputs in the client.
+3. The result is flattened and resized to the requested Facebook export
+   size (defaults to the template's own canvas size, e.g. 1080×1080).
+
+`server/src/types.ts` (`ZoneDef`, `TextZoneDef`, `PhotoZoneDef`) is the
+shared shape the DB (`zones_json`), the render engine, and the client
+editor all agree on — adding a new kind of template is just defining a new
+zone layout, no code changes required elsewhere.
 
 ### AI router (`server/src/services/ai/router.ts`)
 
@@ -75,31 +94,28 @@ the UI can show an "add your API key" prompt for anything unconfigured.
 
 `server/src/services/render/brand.ts` holds the brand's design tokens
 (colors, gradients, layout ratios) transcribed from its design-system spec.
-`buildMarocViralFrame.ts` renders the actual frame — corner accents, logo
-wordmark, gradient-bordered content box, footer icon row — as a PNG with a
-transparent hole over the whole content area (both the photo slot and the
-text panel), so it can be composited last without ever covering dynamic
-content. `seedTemplates.ts` runs once on server boot and inserts the
-Arabic + French variants into the DB if they aren't there yet — nothing to
-configure, they just show up in the Templates list.
+`buildMarocViralFrame.ts` renders the actual background artwork — corner
+accents, logo wordmark, gradient-bordered content box, footer icon row —
+as a locked PNG, plus a `marocViralGeometry()` function that lays out its
+**5 zones** using the generic system above: `photo`, `category` (with a
+"●" prefix, brand-green), `headline` (`**word**` → brand-green highlight),
+`description`, and `cta` (a pill button whose background auto-hugs
+whatever CTA text is set — the pill isn't locked to any fixed width, since
+CTA copy length varies post to post). `seedTemplates.ts` runs once on
+server boot and inserts the Arabic + French variants into the DB if they
+aren't there yet — nothing to configure, they just show up in the
+Templates list, using exactly the same zone system any custom upload uses.
 
-Unlike the generic photo+gradient+headline-banner templates (drag-and-drop
-uploads), this one is a **rich-content** template: it has `categoryZone`
-and `descriptionZone` in addition to `textZone`, so the render pipeline
-renders three independent text blocks — category pill, headline, and
-description — instead of a single banner. The client detects this
-automatically (`RenderPanel.tsx`: `isRichContent = Boolean(template.categoryZone
-|| template.descriptionZone)`) and shows the extra Category/Description
-fields only when the selected template needs them.
+Fonts are **bundled** (`@fontsource/cairo`, `@fontsource/montserrat` — no
+OS-level font install required, works identically on any machine).
 
-Text is rendered with **real bundled fonts** (`@fontsource/cairo` for
-Arabic, `@fontsource/montserrat` for Latin — no OS-level font install
-required, works identically on any machine) via `sharp`'s Pango-based text
-renderer (`richText.ts`), which also gives correct Arabic shaping/RTL and
-native auto-fit/auto-wrap sized to the zone — no hand-rolled width
-heuristics. Wrap a word in `**double asterisks**` in the headline to render
-it in the brand's highlight green, e.g.
-`"المغرب يواصل التقدم نحو **مستقبل أفضل!**"`.
+**Using your own artwork instead:** if you have your own "Maroc Viral" (or
+any other) frame exported from a design tool, upload it on the Templates
+page, add zones (or use the "Quick add: Maroc Viral layout" preset to
+start from the same Photo/Category/Headline/Description/CTA set), and drag
+each into place over your empty content area. Your file is kept
+pixel-perfect as the locked background regardless of whether it has real
+alpha transparency — every zone always composites on top of it.
 
 ---
 
@@ -142,8 +158,8 @@ npm run dev           # http://localhost:5173 (proxies /api and /static to :4000
 
 Then open http://localhost:5173:
 1. **Settings** — paste API key(s) for whichever AI providers you have.
-2. **Templates** — upload your branded frame image, drag out the image slot
-   and text banner, save.
+2. **Templates** — upload your branded artwork, add photo/text zones (or
+   use the Maroc Viral quick-add preset) and drag each into place, save.
 3. **Dashboard** — trending topics (once RSS feeds are reachable from your
    network) → generate captions → render onto your template → download.
 

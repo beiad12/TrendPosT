@@ -1,7 +1,7 @@
 import sharp from "sharp";
 import { pickFont } from "./fonts.js";
 
-function escapePango(text: string): string {
+export function escapePango(text: string): string {
   return text
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")

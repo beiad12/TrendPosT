@@ -1,29 +1,26 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, Template } from "../lib/api.js";
+import { api, isPhotoZone, isTextZone, Template } from "../lib/api.js";
 
 /**
- * Shared "pick template -> headline -> photo -> render" panel used both from
- * the trend detail flow (headline pre-filled from a chosen caption/trend
- * title) and the Templates page (as a standalone preview tool).
+ * Shared "pick template -> fill each zone -> render" panel used both from
+ * the trend detail flow (some zones pre-filled from a chosen trend/caption)
+ * and the Templates page (as a standalone preview tool). Fully generic:
+ * it renders one input per zone the selected template defines (skipping
+ * locked zones, which always use their fixed value), rather than assuming
+ * a fixed headline/category/description shape.
  */
 export default function RenderPanel({
-  initialHeadline,
-  initialPhotoUrl,
-  initialCategory,
-  initialDescription,
+  initialValues,
+  initialPhotoUrls,
 }: {
-  initialHeadline?: string;
-  initialPhotoUrl?: string;
-  initialCategory?: string;
-  initialDescription?: string;
+  initialValues?: Record<string, string>;
+  initialPhotoUrls?: Record<string, string>;
 }) {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [templateId, setTemplateId] = useState<string>("");
-  const [headline, setHeadline] = useState(initialHeadline ?? "");
-  const [category, setCategory] = useState(initialCategory ?? "");
-  const [description, setDescription] = useState(initialDescription ?? "");
-  const [photoUrl, setPhotoUrl] = useState(initialPhotoUrl ?? "");
-  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [values, setValues] = useState<Record<string, string>>(initialValues ?? {});
+  const [photoUrls, setPhotoUrls] = useState<Record<string, string>>(initialPhotoUrls ?? {});
+  const [photoFiles, setPhotoFiles] = useState<Record<string, File>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
@@ -37,15 +34,18 @@ export default function RenderPanel({
   }, []);
 
   const selectedTemplate = useMemo(() => templates.find((t) => t.id === templateId), [templates, templateId]);
-  const isRichContent = Boolean(selectedTemplate?.categoryZone || selectedTemplate?.descriptionZone);
+
+  const editableTextZones = (selectedTemplate?.zones ?? []).filter(isTextZone).filter((z) => !z.locked);
+  const photoZones = (selectedTemplate?.zones ?? []).filter(isPhotoZone);
 
   async function handleRender() {
-    if (!templateId || !headline.trim()) {
-      setError("Pick a template and enter a headline.");
+    if (!templateId) {
+      setError("Pick a template.");
       return;
     }
-    if (!photoFile && !photoUrl.trim()) {
-      setError("Provide a photo (upload or URL).");
+    const missingPhoto = photoZones.find((z) => !photoFiles[z.id] && !photoUrls[z.id]?.trim());
+    if (missingPhoto) {
+      setError(`Provide a photo for "${missingPhoto.label}" (upload or URL).`);
       return;
     }
     setBusy(true);
@@ -53,14 +53,17 @@ export default function RenderPanel({
     try {
       const form = new FormData();
       form.set("templateId", templateId);
-      form.set("headline", headline);
-      if (category.trim()) form.set("category", category.trim());
-      if (description.trim()) form.set("description", description.trim());
-      form.set("outputWidth", "1080");
-      form.set("outputHeight", "1080");
+      form.set("values", JSON.stringify(values));
+      const remainingUrls: Record<string, string> = {};
+      for (const zone of photoZones) {
+        const file = photoFiles[zone.id];
+        if (file) form.set(zone.id, file);
+        else if (photoUrls[zone.id]?.trim()) remainingUrls[zone.id] = photoUrls[zone.id].trim();
+      }
+      form.set("photoUrls", JSON.stringify(remainingUrls));
+      form.set("outputWidth", String(selectedTemplate?.canvasWidth ?? 1080));
+      form.set("outputHeight", String(selectedTemplate?.canvasHeight ?? 1080));
       form.set("format", "jpeg");
-      if (photoFile) form.set("photo", photoFile);
-      else form.set("photoUrl", photoUrl.trim());
 
       const blob = await api.render.render(form);
       setResultUrl(URL.createObjectURL(blob));
@@ -90,73 +93,53 @@ export default function RenderPanel({
           </select>
         </div>
 
-        {isRichContent && (
-          <div>
-            <label className="block text-sm text-neutral-400 mb-1">Category</label>
-            <input
-              className="w-full bg-neutral-900 border border-neutral-700 rounded-md px-3 py-2"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              placeholder="أخبار المغرب / ACTU MAROC"
-            />
-          </div>
-        )}
-
-        <div>
-          <label className="block text-sm text-neutral-400 mb-1">Headline</label>
-          <textarea
-            className="w-full bg-neutral-900 border border-neutral-700 rounded-md px-3 py-2"
-            rows={3}
-            value={headline}
-            onChange={(e) => setHeadline(e.target.value)}
-            placeholder={
-              isRichContent
-                ? "Auto-fit headline… wrap a word in **double asterisks** for the brand highlight color"
-                : "Auto-fit, auto-wrapped headline text…"
-            }
-          />
-        </div>
-
-        {isRichContent && (
-          <div>
-            <label className="block text-sm text-neutral-400 mb-1">Description</label>
+        {editableTextZones.map((zone) => (
+          <div key={zone.id}>
+            <label className="block text-sm text-neutral-400 mb-1">{zone.label}</label>
             <textarea
               className="w-full bg-neutral-900 border border-neutral-700 rounded-md px-3 py-2"
-              rows={3}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Short supporting paragraph shown under the headline…"
+              rows={zone.height > 150 ? 3 : 2}
+              value={values[zone.id] ?? ""}
+              onChange={(e) => setValues((v) => ({ ...v, [zone.id]: e.target.value }))}
+              placeholder={
+                zone.defaultValue ||
+                (zone.highlightColor ? "Wrap a word in **double asterisks** for the highlight color" : "")
+              }
             />
           </div>
-        )}
+        ))}
 
-        <div>
-          <label className="block text-sm text-neutral-400 mb-1">Photo URL (from trend source)</label>
-          <input
-            className="w-full bg-neutral-900 border border-neutral-700 rounded-md px-3 py-2"
-            value={photoUrl}
-            onChange={(e) => {
-              setPhotoUrl(e.target.value);
-              setPhotoFile(null);
-            }}
-            placeholder="https://…"
-          />
-        </div>
-
-        <div className="text-center text-neutral-500 text-xs">— or —</div>
-
-        <div>
-          <label className="block text-sm text-neutral-400 mb-1">Upload your own photo</label>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={(e) => {
-              setPhotoFile(e.target.files?.[0] ?? null);
-              if (e.target.files?.[0]) setPhotoUrl("");
-            }}
-            className="block w-full text-sm text-neutral-400"
-          />
-        </div>
+        {photoZones.map((zone) => (
+          <div key={zone.id} className="space-y-2 border-t border-neutral-800 pt-3">
+            <p className="text-sm text-neutral-400">{zone.label}</p>
+            <input
+              className="w-full bg-neutral-900 border border-neutral-700 rounded-md px-3 py-2"
+              value={photoUrls[zone.id] ?? ""}
+              onChange={(e) => {
+                setPhotoUrls((u) => ({ ...u, [zone.id]: e.target.value }));
+                setPhotoFiles((f) => {
+                  const next = { ...f };
+                  delete next[zone.id];
+                  return next;
+                });
+              }}
+              placeholder="Photo URL — https://…"
+            />
+            <div className="text-center text-neutral-500 text-xs">— or —</div>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) {
+                  setPhotoFiles((files) => ({ ...files, [zone.id]: f }));
+                  setPhotoUrls((u) => ({ ...u, [zone.id]: "" }));
+                }
+              }}
+              className="block w-full text-sm text-neutral-400"
+            />
+          </div>
+        ))}
 
         <button
           onClick={handleRender}

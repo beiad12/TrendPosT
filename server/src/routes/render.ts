@@ -4,8 +4,9 @@ import path from "node:path";
 import fs from "node:fs";
 import { z } from "zod";
 import { db } from "../db/index.js";
-import { uploadPhoto, EXPORTS_DIR } from "../middleware/upload.js";
+import { uploadAnyPhotos, EXPORTS_DIR } from "../middleware/upload.js";
 import { renderPost } from "../services/render/renderEngine.js";
+import { isPhotoZone } from "../types.js";
 import type { Template } from "../types.js";
 
 export const renderRouter = Router();
@@ -20,10 +21,7 @@ function loadTemplate(id: string): Template | null {
     baseImagePath: row.base_image_path,
     canvasWidth: row.canvas_width,
     canvasHeight: row.canvas_height,
-    imageSlot: JSON.parse(row.image_slot_json),
-    textZone: JSON.parse(row.text_zone_json),
-    categoryZone: row.category_zone_json ? JSON.parse(row.category_zone_json) : undefined,
-    descriptionZone: row.description_zone_json ? JSON.parse(row.description_zone_json) : undefined,
+    zones: JSON.parse(row.zones_json),
     style: JSON.parse(row.style_json),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -32,11 +30,10 @@ function loadTemplate(id: string): Template | null {
 
 const bodySchema = z.object({
   templateId: z.string().uuid(),
-  headline: z.string().min(1),
-  /** Optional: category pill + description paragraph, used by rich-content templates (e.g. "Maroc Viral"). */
-  category: z.string().optional(),
-  description: z.string().optional(),
-  photoUrl: z.string().url().optional(),
+  /** zoneId -> text content, JSON-encoded. */
+  values: z.string().optional(),
+  /** zoneId -> remote photo URL, JSON-encoded, for zones not covered by a file upload. */
+  photoUrls: z.string().optional(),
   outputWidth: z.coerce.number().optional(),
   outputHeight: z.coerce.number().optional(),
   format: z.enum(["png", "jpeg"]).optional(),
@@ -44,38 +41,59 @@ const bodySchema = z.object({
 
 /**
  * POST /api/render
- * multipart/form-data OR JSON body:
- *   templateId, headline, and EITHER photo=<file upload> OR photoUrl=<remote image>
+ * multipart/form-data:
+ *   templateId, values=<JSON {zoneId: text}>, photoUrls=<JSON {zoneId: url}>,
+ *   plus any number of file fields named after a photo zone's id (e.g. "photo").
  * Returns the rendered image (binary) and persists a copy under /exports.
  */
-renderRouter.post("/", uploadPhoto.single("photo"), async (req, res) => {
+renderRouter.post("/", uploadAnyPhotos, async (req, res) => {
   const parsed = bodySchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() });
   }
-  const { templateId, headline, category, description, photoUrl, outputWidth, outputHeight, format } = parsed.data;
+  const { templateId, outputWidth, outputHeight, format } = parsed.data;
 
   const template = loadTemplate(templateId);
   if (!template) return res.status(404).json({ error: "Template not found" });
 
-  let photoInput: string | Buffer;
-  if (req.file) {
-    photoInput = req.file.path;
-  } else if (photoUrl) {
-    const resp = await fetch(photoUrl);
-    if (!resp.ok) return res.status(400).json({ error: `Could not fetch photoUrl (${resp.status})` });
-    photoInput = Buffer.from(await resp.arrayBuffer());
-  } else {
-    return res.status(400).json({ error: "Provide a photo upload or photoUrl" });
+  let values: Record<string, string> = {};
+  let photoUrls: Record<string, string> = {};
+  try {
+    if (parsed.data.values) values = JSON.parse(parsed.data.values);
+    if (parsed.data.photoUrls) photoUrls = JSON.parse(parsed.data.photoUrls);
+  } catch {
+    return res.status(400).json({ error: "values/photoUrls must be valid JSON" });
+  }
+
+  const files = (req.files as Express.Multer.File[] | undefined) ?? [];
+  const filesByZone = new Map(files.map((f) => [f.fieldname, f]));
+
+  const photoZoneIds = template.zones.filter(isPhotoZone).map((z) => z.id);
+  const photos: Record<string, string | Buffer> = {};
+
+  for (const zoneId of photoZoneIds) {
+    const file = filesByZone.get(zoneId);
+    if (file) {
+      photos[zoneId] = file.path;
+      continue;
+    }
+    const url = photoUrls[zoneId];
+    if (url) {
+      try {
+        const resp = await fetch(url);
+        if (!resp.ok) return res.status(400).json({ error: `Could not fetch photo for "${zoneId}" (${resp.status})` });
+        photos[zoneId] = Buffer.from(await resp.arrayBuffer());
+      } catch (err: any) {
+        return res.status(400).json({ error: `Could not fetch photo for "${zoneId}": ${err?.message}` });
+      }
+    }
   }
 
   try {
     const output = await renderPost({
       template,
-      photo: photoInput,
-      headline,
-      category,
-      description,
+      values,
+      photos,
       outputWidth,
       outputHeight,
       format,

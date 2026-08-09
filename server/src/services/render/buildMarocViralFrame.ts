@@ -1,6 +1,7 @@
 import sharp from "sharp";
 import { MAROC_VIRAL_COLORS as C, MAROC_VIRAL_LAYOUT as L } from "./brand.js";
 import { renderRichText } from "./richText.js";
+import type { ZoneDef } from "../../types.js";
 
 type Overlay = { input: string | Buffer; left: number; top: number };
 
@@ -65,59 +66,113 @@ export const CATEGORY_LABEL: Record<"ar" | "fr", string> = {
   fr: "ACTU MAROC",
 };
 
+export const CTA_LABEL: Record<"ar" | "fr", string> = {
+  ar: "← شارك رأيك في التعليقات",
+  fr: "Lire la suite en commentaire →",
+};
+
 export interface MarocViralGeometry {
   canvas: number;
   contentBox: { x: number; y: number; width: number; height: number };
-  imageSlot: { x: number; y: number; width: number; height: number };
-  categoryZone: { x: number; y: number; width: number; height: number };
-  headlineZone: { x: number; y: number; width: number; height: number };
-  descriptionZone: { x: number; y: number; width: number; height: number };
+  zones: ZoneDef[];
 }
 
-export function marocViralGeometry(canvas = L.canvas): MarocViralGeometry {
+/**
+ * Layout for the "Maroc Viral" brand template, expressed as the generic
+ * zone system: a photo zone (right panel) plus four text zones (left
+ * panel) — category pill, headline, description, and a CTA pill — in the
+ * same reusable shape any other template's zones use.
+ */
+export function marocViralGeometry(canvas = L.canvas, language: "ar" | "fr" = "fr"): MarocViralGeometry {
   const pad = 60;
   const contentBox = { x: pad, y: 330, width: canvas - pad * 2, height: 560 };
   const textPanelWidth = Math.round(contentBox.width * 0.52);
   const innerPad = 36;
+  const align = language === "ar" ? "right" : "left";
 
   const categoryHeight = 56;
   const categoryGap = 14;
-  const headlineHeight = 230;
-  const headlineGap = 26;
-  const descriptionHeight = 150;
+  const headlineHeight = 200;
+  const headlineGap = 20;
+  const descriptionHeight = 110;
+  const descriptionGap = 16;
+  const ctaHeight = 44;
 
+  const zoneX = contentBox.x + innerPad;
+  const zoneWidth = textPanelWidth - innerPad * 2;
   const categoryY = contentBox.y + innerPad;
   const headlineY = categoryY + categoryHeight + categoryGap;
   const descriptionY = headlineY + headlineHeight + headlineGap;
+  const ctaY = descriptionY + descriptionHeight + descriptionGap;
 
-  return {
-    canvas,
-    contentBox,
-    imageSlot: {
+  const zones: ZoneDef[] = [
+    {
+      id: "photo",
+      label: "Photo",
+      type: "photo",
       x: contentBox.x + textPanelWidth,
       y: contentBox.y,
       width: contentBox.width - textPanelWidth,
       height: contentBox.height,
     },
-    categoryZone: {
-      x: contentBox.x + innerPad,
+    {
+      id: "category",
+      label: "Category",
+      type: "text",
+      x: zoneX,
       y: categoryY,
-      width: textPanelWidth - innerPad * 2,
+      width: zoneWidth,
       height: categoryHeight,
+      align,
+      weight: "bold",
+      color: C.textPrimary,
+      highlightColor: C.green,
+      prefix: "●",
+      defaultValue: CATEGORY_LABEL[language],
     },
-    headlineZone: {
-      x: contentBox.x + innerPad,
+    {
+      id: "headline",
+      label: "Headline",
+      type: "text",
+      x: zoneX,
       y: headlineY,
-      width: textPanelWidth - innerPad * 2,
+      width: zoneWidth,
       height: headlineHeight,
+      align,
+      weight: "extrabold",
+      color: C.textPrimary,
+      highlightColor: C.green,
     },
-    descriptionZone: {
-      x: contentBox.x + innerPad,
+    {
+      id: "description",
+      label: "Description",
+      type: "text",
+      x: zoneX,
       y: descriptionY,
-      width: textPanelWidth - innerPad * 2,
+      width: zoneWidth,
       height: descriptionHeight,
+      align,
+      weight: "regular",
+      color: C.textSecondary,
     },
-  };
+    {
+      id: "cta",
+      label: "Call to action",
+      type: "text",
+      x: zoneX,
+      y: ctaY,
+      width: zoneWidth,
+      height: ctaHeight,
+      align,
+      weight: "bold",
+      color: C.green,
+      pill: true,
+      pillColor: C.green,
+      defaultValue: CTA_LABEL[language],
+    },
+  ];
+
+  return { canvas, contentBox, zones };
 }
 
 /**
@@ -130,7 +185,7 @@ export function marocViralGeometry(canvas = L.canvas): MarocViralGeometry {
  */
 export async function buildMarocViralFrame(language: "ar" | "fr"): Promise<Buffer> {
   const size = L.canvas;
-  const geo = marocViralGeometry(size);
+  const geo = marocViralGeometry(size, language);
   const { contentBox } = geo;
 
   const structuralSvg = `<svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">

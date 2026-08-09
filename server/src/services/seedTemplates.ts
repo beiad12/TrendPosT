@@ -19,8 +19,9 @@ const VARIANTS: Variant[] = [
 /**
  * Idempotently seeds the branded "Maroc Viral" templates (Arabic + French
  * variants) so the app is usable out of the box — generates the frame PNG
- * (see buildMarocViralFrame.ts) and inserts the matching DB row, but only
- * if a template with that name doesn't already exist.
+ * (see buildMarocViralFrame.ts) and inserts the matching DB row using the
+ * generic layer/zone system, but only if a template with that name doesn't
+ * already exist.
  */
 export async function seedMarocViralTemplates(): Promise<void> {
   for (const variant of VARIANTS) {
@@ -32,20 +33,15 @@ export async function seedMarocViralTemplates(): Promise<void> {
     const filePath = path.join(TEMPLATES_DIR, filename);
     fs.writeFileSync(filePath, frameBuffer);
 
-    const geo = marocViralGeometry();
-    const align = variant.language === "ar" ? "right" : "left";
+    const geo = marocViralGeometry(1080, variant.language);
     const id = randomUUID();
     const now = new Date().toISOString();
 
     db.prepare(
       `INSERT INTO templates
-        (id, name, category, base_image_path, canvas_width, canvas_height,
-         image_slot_json, text_zone_json, category_zone_json, description_zone_json,
-         style_json, created_at, updated_at)
+        (id, name, category, base_image_path, canvas_width, canvas_height, zones_json, style_json, created_at, updated_at)
        VALUES
-        (@id, @name, @category, @base_image_path, @canvas_width, @canvas_height,
-         @image_slot_json, @text_zone_json, @category_zone_json, @description_zone_json,
-         @style_json, @created_at, @updated_at)`
+        (@id, @name, @category, @base_image_path, @canvas_width, @canvas_height, @zones_json, @style_json, @created_at, @updated_at)`
     ).run({
       id,
       name: variant.name,
@@ -53,17 +49,8 @@ export async function seedMarocViralTemplates(): Promise<void> {
       base_image_path: filePath,
       canvas_width: geo.canvas,
       canvas_height: geo.canvas,
-      image_slot_json: JSON.stringify(geo.imageSlot),
-      text_zone_json: JSON.stringify({ ...geo.headlineZone, align }),
-      category_zone_json: JSON.stringify({ ...geo.categoryZone, align }),
-      description_zone_json: JSON.stringify({ ...geo.descriptionZone, align }),
-      style_json: JSON.stringify({
-        fontColor: C.textPrimary,
-        highlightColor: C.green,
-        categoryColor: C.textPrimary,
-        descriptionColor: C.textSecondary,
-        canvasBackground: C.bgPrimary,
-      }),
+      zones_json: JSON.stringify(geo.zones),
+      style_json: JSON.stringify({ canvasBackground: C.bgPrimary }),
       created_at: now,
       updated_at: now,
     });
