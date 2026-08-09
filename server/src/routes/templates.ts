@@ -6,6 +6,7 @@ import { db } from "../db/index.js";
 import { uploadTemplateImage, uploadMemory } from "../middleware/upload.js";
 import { detectTemplateZones, detectedZonesToDefs } from "../services/ai/zoneDetection.js";
 import { ProviderKeyMissingError } from "../services/ai/types.js";
+import { asyncHandler } from "../middleware/asyncHandler.js";
 import type { Template } from "../types.js";
 
 export const templatesRouter = Router();
@@ -18,7 +19,7 @@ export const templatesRouter = Router();
  * user reviews/adjusts in the editor rather than dragging every rectangle
  * by hand. Requires an Anthropic API key configured in Settings.
  */
-templatesRouter.post("/detect-zones", uploadMemory.single("file"), async (req, res) => {
+templatesRouter.post("/detect-zones", uploadMemory.single("file"), asyncHandler(async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "file is required" });
 
   try {
@@ -36,7 +37,7 @@ templatesRouter.post("/detect-zones", uploadMemory.single("file"), async (req, r
     }
     res.status(500).json({ error: "Zone detection failed", detail: (err as Error)?.message });
   }
-});
+}));
 
 function rowToTemplate(row: any): Template {
   return {
@@ -80,7 +81,6 @@ const textZoneSchema = zoneBaseSchema.extend({
   weight: z.enum(["regular", "bold", "extrabold"]).optional(),
   color: z.string().optional(),
   highlightColor: z.string().optional(),
-  maxLines: z.number().int().positive().optional(),
   defaultValue: z.string().optional(),
   pill: z.boolean().optional(),
   pillColor: z.string().optional(),
@@ -112,7 +112,7 @@ const createSchema = z.object({
  * bottom layer — it does not need any real alpha transparency; every zone
  * (photo or text) is composited strictly on top of it at render time.
  */
-templatesRouter.post("/", uploadTemplateImage.single("file"), async (req, res) => {
+templatesRouter.post("/", uploadTemplateImage.single("file"), asyncHandler(async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "file is required" });
 
   let parsed;
@@ -132,7 +132,12 @@ templatesRouter.post("/", uploadTemplateImage.single("file"), async (req, res) =
     return res.status(400).json({ error: "Zone ids must be unique" });
   }
 
-  const metadata = await sharp(req.file.path).metadata();
+  let metadata;
+  try {
+    metadata = await sharp(req.file.path).metadata();
+  } catch (err: any) {
+    return res.status(400).json({ error: "Uploaded file is not a valid image", detail: err?.message });
+  }
   const id = randomUUID();
   const now = new Date().toISOString();
 
@@ -155,7 +160,7 @@ templatesRouter.post("/", uploadTemplateImage.single("file"), async (req, res) =
 
   const row = db.prepare("SELECT * FROM templates WHERE id = ?").get(id);
   res.status(201).json({ template: rowToTemplate(row) });
-});
+}));
 
 const updateSchema = z.object({
   name: z.string().min(1).optional(),
@@ -193,6 +198,8 @@ templatesRouter.patch("/:id", (req, res) => {
 });
 
 templatesRouter.delete("/:id", (req, res) => {
+  const existing = db.prepare("SELECT id FROM templates WHERE id = ?").get(req.params.id);
+  if (!existing) return res.status(404).json({ error: "Template not found" });
   db.prepare("DELETE FROM templates WHERE id = ?").run(req.params.id);
-  res.status(204).send();
+  res.json({ deleted: true, id: req.params.id });
 });

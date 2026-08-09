@@ -1,4 +1,3 @@
-import { db } from "../../db/index.js";
 import type { AiAdapter, CaptionRequest, CaptionResult } from "./types.js";
 import { ProviderKeyMissingError } from "./types.js";
 import type { Provider } from "./providers.js";
@@ -26,9 +25,4 @@ export async function generateCaptions(
 
   const adapter = ADAPTERS[req.provider];
   return adapter.generateCaptions(apiKey, req);
-}
-
-export function configuredProviders(): Provider[] {
-  const rows = db.prepare("SELECT provider FROM api_keys").all() as { provider: Provider }[];
-  return rows.map((r) => r.provider);
 }

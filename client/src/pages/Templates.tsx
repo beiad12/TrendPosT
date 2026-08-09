@@ -67,7 +67,6 @@ const MAROC_VIRAL_PRESET = (): EditableZone[] => {
     weight: "bold",
     color: "#39FF14",
     pill: true,
-    locked: true,
     defaultValue: "Lire la suite en commentaire →",
   });
   return zones;
@@ -92,6 +91,16 @@ export default function Templates() {
   }
 
   useEffect(refresh, []);
+
+  async function handleDeleteTemplate(id: string, name: string) {
+    if (!window.confirm(`Delete "${name}"? This can't be undone.`)) return;
+    try {
+      await api.templates.remove(id);
+      refresh();
+    } catch (e: any) {
+      setError(e.message ?? "Failed to delete template");
+    }
+  }
 
   function handleFile(f: File | null) {
     setFile(f);
@@ -465,9 +474,15 @@ export default function Templates() {
           {templates.map((t) => (
             <div key={t.id} className="bg-neutral-900 border border-neutral-800 rounded-md p-2 text-xs">
               <p className="font-medium truncate">{t.name}</p>
-              <p className="text-neutral-500">
+              <p className="text-neutral-500 mb-2">
                 {t.category} · {t.zones.length} zone{t.zones.length === 1 ? "" : "s"}
               </p>
+              <button
+                onClick={() => handleDeleteTemplate(t.id, t.name)}
+                className="text-red-400 hover:text-red-300 hover:underline"
+              >
+                Delete
+              </button>
             </div>
           ))}
         </div>

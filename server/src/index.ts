@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import multer from "multer";
 import { trendsRouter } from "./routes/trends.js";
 import { aiRouter } from "./routes/ai.js";
 import { settingsRouter } from "./routes/settings.js";
@@ -28,10 +29,18 @@ app.use("/api/settings", settingsRouter);
 app.use("/api/templates", templatesRouter);
 app.use("/api/render", renderRouter);
 
-// Generic error handler (e.g. multer file-filter rejections).
+// Generic error handler (e.g. multer file-filter/size-limit rejections, or any
+// route handler's rejected promise via asyncHandler).
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err);
-  res.status(err?.status ?? 500).json({ error: err?.message ?? "Internal server error" });
+  const status = err?.status ?? (err instanceof multer.MulterError ? 400 : 500);
+  res.status(status).json({ error: err?.message ?? "Internal server error" });
+});
+
+// Last-resort safety net: log and keep the process alive rather than crashing
+// on any error path that somehow still escapes asyncHandler/route-level try/catch.
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled promise rejection:", reason);
 });
 
 seedMarocViralTemplates()

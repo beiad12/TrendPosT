@@ -8,6 +8,7 @@ import { uploadAnyPhotos, EXPORTS_DIR } from "../middleware/upload.js";
 import { renderPost } from "../services/render/renderEngine.js";
 import { isPhotoZone } from "../types.js";
 import type { Template } from "../types.js";
+import { asyncHandler } from "../middleware/asyncHandler.js";
 
 export const renderRouter = Router();
 
@@ -46,7 +47,7 @@ const bodySchema = z.object({
  *   plus any number of file fields named after a photo zone's id (e.g. "photo").
  * Returns the rendered image (binary) and persists a copy under /exports.
  */
-renderRouter.post("/", uploadAnyPhotos, async (req, res) => {
+renderRouter.post("/", uploadAnyPhotos, asyncHandler(async (req, res) => {
   const parsed = bodySchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() });
@@ -71,22 +72,25 @@ renderRouter.post("/", uploadAnyPhotos, async (req, res) => {
   const photoZoneIds = template.zones.filter(isPhotoZone).map((z) => z.id);
   const photos: Record<string, string | Buffer> = {};
 
+  const remoteFetches = photoZoneIds
+    .filter((zoneId) => !filesByZone.has(zoneId) && photoUrls[zoneId])
+    .map(async (zoneId) => {
+      const url = photoUrls[zoneId];
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error(`Could not fetch photo for "${zoneId}" (${resp.status})`);
+      return { zoneId, buffer: Buffer.from(await resp.arrayBuffer()) };
+    });
+
   for (const zoneId of photoZoneIds) {
     const file = filesByZone.get(zoneId);
-    if (file) {
-      photos[zoneId] = file.path;
-      continue;
-    }
-    const url = photoUrls[zoneId];
-    if (url) {
-      try {
-        const resp = await fetch(url);
-        if (!resp.ok) return res.status(400).json({ error: `Could not fetch photo for "${zoneId}" (${resp.status})` });
-        photos[zoneId] = Buffer.from(await resp.arrayBuffer());
-      } catch (err: any) {
-        return res.status(400).json({ error: `Could not fetch photo for "${zoneId}": ${err?.message}` });
-      }
-    }
+    if (file) photos[zoneId] = file.path;
+  }
+
+  try {
+    const fetched = await Promise.all(remoteFetches);
+    for (const { zoneId, buffer } of fetched) photos[zoneId] = buffer;
+  } catch (err: any) {
+    return res.status(400).json({ error: err?.message ?? "Could not fetch a remote photo" });
   }
 
   try {
@@ -110,4 +114,4 @@ renderRouter.post("/", uploadAnyPhotos, async (req, res) => {
   } catch (err: any) {
     res.status(500).json({ error: "Render failed", detail: err?.message });
   }
-});
+}));

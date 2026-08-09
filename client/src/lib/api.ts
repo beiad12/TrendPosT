@@ -74,7 +74,6 @@ export interface TextZoneDef extends ZoneBase {
   weight?: FontWeight;
   color?: string;
   highlightColor?: string;
-  maxLines?: number;
   defaultValue?: string;
   prefix?: string;
   pill?: boolean;
@@ -163,6 +162,7 @@ export const api = {
       form.set("file", file);
       return request<{ zones: ZoneDef[] }>("/templates/detect-zones", { method: "POST", body: form });
     },
+    remove: (id: string) => request<{ deleted: boolean; id: string }>(`/templates/${id}`, { method: "DELETE" }),
   },
   render: {
     render: async (form: FormData): Promise<Blob> => {

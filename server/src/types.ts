@@ -25,7 +25,6 @@ export interface TextZoneDef extends ZoneBase {
   color?: string; // default #FFFFFF
   /** Color applied to `**word**`-wrapped substrings within this zone's content. */
   highlightColor?: string;
-  maxLines?: number;
   /** Used when locked, or as a placeholder/fallback when no value is supplied at render time. */
   defaultValue?: string;
   /** Fixed decorative text rendered in highlightColor before the value, e.g. "●" for a category dot. */

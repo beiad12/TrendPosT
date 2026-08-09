@@ -22,21 +22,20 @@ function makeStorage(destDir: string) {
   });
 }
 
+/** Thrown for client input problems (bad file type, etc.) — carries a `status` the error middleware respects. */
+class UploadValidationError extends Error {
+  status = 400;
+}
+
 const imageFileFilter: multer.Options["fileFilter"] = (_req, file, cb) => {
   if (!/^image\/(png|jpe?g|webp)$/.test(file.mimetype)) {
-    return cb(new Error("Only PNG, JPG, or WEBP images are allowed"));
+    return cb(new UploadValidationError("Only PNG, JPG, or WEBP images are allowed"));
   }
   cb(null, true);
 };
 
 export const uploadTemplateImage = multer({
   storage: makeStorage(TEMPLATES_DIR),
-  fileFilter: imageFileFilter,
-  limits: { fileSize: 15 * 1024 * 1024 },
-});
-
-export const uploadPhoto = multer({
-  storage: makeStorage(UPLOADS_DIR),
   fileFilter: imageFileFilter,
   limits: { fileSize: 15 * 1024 * 1024 },
 });

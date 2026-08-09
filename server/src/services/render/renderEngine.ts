@@ -64,7 +64,10 @@ export async function renderPost(opts: RenderOptions): Promise<Buffer> {
 
     if (!isTextZone(zone)) continue;
 
-    const raw = zone.locked ? zone.defaultValue ?? "" : values[zone.id] ?? zone.defaultValue ?? "";
+    // A blank/whitespace-only supplied value falls back to defaultValue too (not just a
+    // missing key) — otherwise clearing a textarea silently drops fixed copy like a CTA.
+    const supplied = zone.locked ? undefined : values[zone.id];
+    const raw = supplied?.trim() ? supplied : zone.defaultValue ?? "";
     if (!raw.trim()) continue;
 
     const color = zone.color ?? "#FFFFFF";

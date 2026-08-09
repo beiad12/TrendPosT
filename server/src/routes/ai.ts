@@ -3,6 +3,7 @@ import { z } from "zod";
 import { generateCaptions } from "../services/ai/router.js";
 import { ProviderKeyMissingError } from "../services/ai/types.js";
 import { PROVIDERS } from "../services/ai/providers.js";
+import { asyncHandler } from "../middleware/asyncHandler.js";
 
 export const aiRouter = Router();
 
@@ -28,7 +29,7 @@ const generateSchema = z.object({
  * Body: { provider?, trend, language, tones? }
  * If `provider` is omitted, runs "Compare All" across every configured provider.
  */
-aiRouter.post("/generate", async (req, res) => {
+aiRouter.post("/generate", asyncHandler(async (req, res) => {
   const parsed = generateSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() });
@@ -54,4 +55,4 @@ aiRouter.post("/generate", async (req, res) => {
   });
 
   res.json({ results: payload });
-});
+}));

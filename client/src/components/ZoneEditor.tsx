@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Rect } from "../lib/api.js";
 
 export interface EditorZone {
@@ -14,6 +14,14 @@ export interface EditorZone {
  * active, and reports it back scaled to the image's natural (full)
  * resolution — which is what the render engine operates in. Works with any
  * number of zones (not a fixed set), each carrying its own display color.
+ *
+ * Drag tracking happens on `window`, not just the container: many zones
+ * (e.g. a photo zone meant to touch the image's edge) need to be dragged
+ * right up to — or briefly past — the container boundary, and the mouse
+ * button can legitimately be released outside it. Container-only listeners
+ * would either cancel the drag the instant the cursor left the element or
+ * leave it stuck if mouseup happened outside; tracking on `window` while a
+ * drag is in progress avoids both.
  */
 export default function ZoneEditor({
   imageUrl,
@@ -63,29 +71,48 @@ export default function ZoneEditor({
     setDragRect(null);
   }
 
-  function handleMouseMove(e: React.MouseEvent) {
+  // Tracks the drag on `window` (not the container) once started, so it survives the
+  // cursor moving outside the container's bounds and always ends cleanly on mouseup.
+  useEffect(() => {
     if (!dragStart) return;
-    const rect = containerRef.current!.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    setDragRect({
-      x: Math.min(dragStart.x, x),
-      y: Math.min(dragStart.y, y),
-      width: Math.abs(x - dragStart.x),
-      height: Math.abs(y - dragStart.y),
-    });
-  }
 
-  function handleMouseUp() {
-    if (dragRect && containerRef.current && activeZoneId) {
-      const { clientWidth, clientHeight } = containerRef.current;
-      if (dragRect.width > 8 && dragRect.height > 8) {
-        onChange(activeZoneId, toNatural(dragRect, clientWidth, clientHeight));
-      }
+    function clientToContainer(clientX: number, clientY: number) {
+      const box = containerRef.current!.getBoundingClientRect();
+      return {
+        x: Math.max(0, Math.min(box.width, clientX - box.left)),
+        y: Math.max(0, Math.min(box.height, clientY - box.top)),
+      };
     }
-    setDragStart(null);
-    setDragRect(null);
-  }
+
+    function onMove(e: MouseEvent) {
+      const p = clientToContainer(e.clientX, e.clientY);
+      setDragRect({
+        x: Math.min(dragStart!.x, p.x),
+        y: Math.min(dragStart!.y, p.y),
+        width: Math.abs(p.x - dragStart!.x),
+        height: Math.abs(p.y - dragStart!.y),
+      });
+    }
+
+    function onUp() {
+      setDragStart(null);
+      setDragRect((rect) => {
+        if (rect && containerRef.current && activeZoneId && rect.width > 8 && rect.height > 8) {
+          const { clientWidth, clientHeight } = containerRef.current;
+          onChange(activeZoneId, toNatural(rect, clientWidth, clientHeight));
+        }
+        return null;
+      });
+    }
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dragStart, activeZoneId]);
 
   const activeColor = zones.find((z) => z.id === activeZoneId)?.color ?? "#38bdf8";
 
@@ -96,12 +123,6 @@ export default function ZoneEditor({
         activeZoneId ? "cursor-crosshair" : "cursor-default"
       }`}
       onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={() => {
-        setDragStart(null);
-        setDragRect(null);
-      }}
     >
       <img src={imageUrl} alt="Template" className="w-full block pointer-events-none" draggable={false} />
 

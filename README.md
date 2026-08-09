@@ -146,7 +146,10 @@ alpha transparency — every zone always composites on top of it.
 
 Requires Node 22.5+ (the server uses Node's built-in `node:sqlite` for local
 dev — no native/compiled dependency, so `npm install` works out of the box
-on Windows/macOS/Linux with no build tools required).
+on Windows/macOS/Linux with no build tools required). `node:sqlite` needs
+`--experimental-sqlite` on Node 22.5–22.12 (unflagged from 22.13+); the
+`npm run dev`/`start` scripts set that flag automatically via `NODE_OPTIONS`
+so this is transparent regardless of which 22.x you have.
 
 ### Windows — one-click install & launch
 

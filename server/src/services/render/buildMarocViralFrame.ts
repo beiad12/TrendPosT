@@ -105,15 +105,21 @@ export function marocViralGeometry(canvas = L.canvas, language: "ar" | "fr" = "f
   const descriptionY = headlineY + headlineHeight + headlineGap;
   const ctaY = descriptionY + descriptionHeight + descriptionGap;
 
+  // The photo zone is composited on top of the frame (per the generic zone system,
+  // the background artwork is the bottom layer), so its top/right/bottom edges must
+  // stay inset from the content box's own border+glow, or the photo would visibly
+  // paint over the inner half of that stroke on those three sides.
+  const borderInset = L.borderWidth + 6;
+
   const zones: ZoneDef[] = [
     {
       id: "photo",
       label: "Photo",
       type: "photo",
       x: contentBox.x + textPanelWidth,
-      y: contentBox.y,
-      width: contentBox.width - textPanelWidth,
-      height: contentBox.height,
+      y: contentBox.y + borderInset,
+      width: contentBox.width - textPanelWidth - borderInset,
+      height: contentBox.height - borderInset * 2,
     },
     {
       id: "category",
