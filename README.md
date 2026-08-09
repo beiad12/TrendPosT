@@ -76,20 +76,35 @@ the UI can show an "add your API key" prompt for anything unconfigured.
 
 Requires Node 20+.
 
+### Windows — one-click install & launch
+
+1. Double-click **`INSTALL.bat`** (installs server + client dependencies and
+   creates `server/.env` with a freshly generated `MASTER_KEY` — safe to
+   re-run, it never overwrites an existing `.env`).
+2. Double-click **`LAUNCH.bat`** — opens the API server and web app each in
+   their own terminal window, then opens http://localhost:5173 in your
+   browser. Close those two windows to stop it.
+
+### macOS / Linux — one-click install & launch
+
+```bash
+./install.sh
+./launch.sh
+```
+
+### Manual setup (any OS)
+
 ```bash
 # 1. Server
 cd server
-cp .env.example .env
-# generate a MASTER_KEY for the API-key vault:
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-# paste it into .env as MASTER_KEY=...
 npm install
-npm run dev        # http://localhost:4000
+npm run setup-env   # creates .env from .env.example with a generated MASTER_KEY
+npm run dev          # http://localhost:4000
 
 # 2. Client (separate terminal)
 cd client
 npm install
-npm run dev         # http://localhost:5173 (proxies /api and /static to :4000)
+npm run dev           # http://localhost:5173 (proxies /api and /static to :4000)
 ```
 
 Then open http://localhost:5173:
