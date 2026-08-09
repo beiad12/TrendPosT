@@ -1,0 +1,190 @@
+// Centralized trend-engine configuration — every source URL, query list,
+// scoring weight, and provider on/off switch lives here, not scattered
+// across provider files. This is the "one place to look" the spec asks for.
+
+export interface QueryGroup {
+  key: string;
+  label: string;
+  language: "ar" | "fr" | "en";
+  country: string;
+  categoryHint: string;
+  queries: string[];
+}
+
+/**
+ * Google News' RSS *search* endpoint (news.google.com/rss/search) is a
+ * different, still-functioning endpoint from the old, now-dead
+ * "trendingsearches/daily/rss" one — this is the real fix, not a
+ * find-and-replace of the broken URL. hl/gl/ceid steer it toward
+ * Moroccan French/Arabic results.
+ */
+export const GOOGLE_NEWS_QUERY_GROUPS: QueryGroup[] = [
+  {
+    key: "morocco-ar",
+    label: "Google News — المغرب",
+    language: "ar",
+    country: "MA",
+    categoryHint: "morocco",
+    queries: [
+      "المغرب", "أخبار المغرب", "المغرب اليوم", "عاجل المغرب", "الرباط",
+      "الدار البيضاء", "مراكش", "طنجة", "فاس", "أكادير", "وجدة", "الناظور", "تطوان",
+    ],
+  },
+  {
+    key: "morocco-fr",
+    label: "Google News — Maroc",
+    language: "fr",
+    country: "MA",
+    categoryHint: "morocco",
+    queries: [
+      "Maroc", "actualité Maroc", "Maroc aujourd'hui", "Maroc urgent",
+      "Rabat", "Casablanca", "Marrakech", "Tanger", "Fès", "Agadir", "Oujda",
+    ],
+  },
+  {
+    key: "morocco-viral",
+    label: "Google News — Maroc viral",
+    language: "fr",
+    country: "MA",
+    categoryHint: "viral",
+    queries: [
+      "Maroc viral", "buzz Maroc", "actualité virale Maroc", "polémique Maroc",
+      "tendance Maroc", "réseaux sociaux Maroc",
+    ],
+  },
+  {
+    key: "morocco-sports",
+    label: "Google News — Sport marocain",
+    language: "fr",
+    country: "MA",
+    categoryHint: "sports",
+    queries: [
+      "Maroc football", "équipe nationale Maroc", "Lions de l'Atlas", "Wydad",
+      "Raja", "AS FAR", "football marocain",
+    ],
+  },
+  {
+    key: "morocco-international",
+    label: "Google News — Maroc International",
+    language: "fr",
+    country: "MA",
+    categoryHint: "world",
+    queries: [
+      "Maroc France", "Maroc Espagne", "Maroc Algérie", "Maroc Afrique",
+      "Moroccans", "Morocco international",
+    ],
+  },
+];
+
+/** Recognized Moroccan publishers — used for source-domain corroboration weighting, not as direct RSS endpoints. */
+export const KNOWN_MOROCCAN_PUBLISHERS = [
+  "hespress.com", "le360.ma", "h24info.ma", "akhbarona.com", "map.ma",
+  "lopinion.ma", "telquel.ma", "medias24.com", "moroccoworldnews.com",
+  "2m.ma", "snrt.ma", "alahdath.info", "chouftv.ma",
+];
+
+export interface CategoryDef {
+  key: string;
+  label: string;
+  emoji: string;
+  keywords: RegExp;
+  /** 0..1 — how strongly this category itself signals "worth posting" (feeds the small category component of the score). */
+  importance: number;
+}
+
+/** The 11 dashboard categories, classified by keyword match against title+description. Order matters — first match wins, so put more specific categories first. */
+export const CATEGORIES: CategoryDef[] = [
+  { key: "breaking", label: "عاجل", emoji: "🔥", importance: 1, keywords: /(عاجل|breaking|urgent|dernière minute)/i },
+  { key: "incidents", label: "حوادث", emoji: "🚨", importance: 0.85, keywords: /(حادث|حادثة|وفاة|جريمة|اعتقال|accident|crime|meurtre|arrestation|incendie|drame)/i },
+  { key: "weather", label: "طقس", emoji: "🌦️", importance: 0.7, keywords: /(طقس|أمطار|فيضانات|زلزال|météo|pluie|inondation|séisme|tempête|canicule)/i },
+  { key: "sports", label: "الرياضة", emoji: "⚽", importance: 0.9, keywords: /(رياضة|كرة القدم|مباراة|منتخب|فريق|sport|football|match|équipe|championnat)/i },
+  { key: "entertainment", label: "فن ومشاهير", emoji: "🎭", importance: 0.8, keywords: /(فنان|فنانة|مشهور|نجم|مسلسل|فيلم|célébrité|artiste|star|film|série)/i },
+  { key: "economy", label: "اقتصاد", emoji: "💰", importance: 0.6, keywords: /(اقتصاد|بورصة|استثمار|ميزانية|économie|bourse|investissement|budget|prix|inflation)/i },
+  { key: "technology", label: "تكنولوجيا", emoji: "💻", importance: 0.55, keywords: /(تكنولوجيا|تقنية|ذكاء اصطناعي|technologie|application|intelligence artificielle|numérique)/i },
+  { key: "development", label: "مشاريع وتنمية", emoji: "🏗️", importance: 0.65, keywords: /(مشروع|بنية تحتية|تنمية|projet|infrastructure|développement|inauguration|chantier)/i },
+  { key: "society", label: "مجتمع", emoji: "❤️", importance: 0.5, keywords: /(مجتمع|تعليم|صحة|société|éducation|santé|social)/i },
+  { key: "world", label: "العالم", emoji: "🌍", importance: 0.4, keywords: /(العالم|دولي|international|monde|étranger)/i },
+  { key: "morocco", label: "المغرب", emoji: "🇲🇦", importance: 0.6, keywords: /./ }, // catch-all default
+];
+
+/** Viral-potential signal categories — mirrors what actually spreads on Facebook, weighted by strength. */
+export const VIRAL_SIGNALS: { category: string; weight: number; words: RegExp }[] = [
+  { category: "outrage", weight: 10, words: /(scandale|colère|indign|احتجاج|فضيحة|غضب)/i },
+  { category: "shock", weight: 10, words: /(choc|dramatique|صدمة|مفاجأة|drame)/i },
+  { category: "breaking", weight: 9, words: /(عاجل|breaking|urgent|dernière minute)/i },
+  { category: "national-pride", weight: 8, words: /(المغرب يفوز|بطولة|إنجاز|record|exploit|victoire du maroc|منتخب)/i },
+  { category: "crime", weight: 8, words: /(جريمة|مقتل|وفاة|accident|حادث|مصرع|meurtre)/i },
+  { category: "celebrity", weight: 6, words: /(فنان|نجم|مشهور|star|célébrité|artiste)/i },
+  { category: "money", weight: 5, words: /(أموال|ثروة|مليون|مليار|argent|millions|budget)/i },
+  { category: "weather-event", weight: 5, words: /(فيضانات|زلزال|عاصفة|inondation|séisme|tempête|canicule)/i },
+  { category: "humor", weight: 4, words: /(insolite|drôle|humour|طريف|مضحك)/i },
+  { category: "tech", weight: 3, words: /(ذكاء اصطناعي|intelligence artificielle|تطبيق جديد)/i },
+];
+
+/** High relevance: the story is directly about Morocco/Moroccans (place, institution, team, person). */
+export const MOROCCO_HIGH_RELEVANCE = /(maroc|marocain|morocco|moroccan|المغرب|مغرب|مغربي|الرباط|rabat|casablanca|الدار البيضاء|دار البيضاء|marrakech|مراكش|tanger|tangier|طنجة|f[eè]s|fez|فاس|agadir|أكادير|oujda|وجدة|t[ée]touan|تطوان|nador|الناظور|wydad|وداد|\braja\b|رجاء|as far|lions de l'atlas|أسود الأطلس|منتخب المغرب)/i;
+
+/** Medium relevance: an international story that names Morocco alongside another country/region (bilateral, diplomatic, regional). */
+export const MOROCCO_MEDIUM_RELEVANCE = /(france|espagne|spain|algérie|algeria|afrique|africa)/i;
+
+export interface ScoreWeights {
+  freshness: number;
+  sourceCount: number;
+  velocity: number;
+  moroccoRelevance: number;
+  social: number;
+  category: number;
+  viralPotential: number;
+}
+
+/** Sums to 100 — the weight given to each factor of the 0-100 trend score. Tune here, not inline in scoring.ts. */
+export const SCORE_WEIGHTS: ScoreWeights = {
+  freshness: 20,
+  sourceCount: 20,
+  velocity: 20,
+  moroccoRelevance: 15,
+  social: 10,
+  category: 5,
+  viralPotential: 10,
+};
+
+export interface ProviderToggle {
+  enabled: boolean;
+  reason?: string;
+}
+
+/**
+ * Central provider on/off switches. Reddit and Google Trends read live env
+ * vars so they self-report "not_configured" rather than failing, without
+ * needing a code change to disable them.
+ */
+export const PROVIDERS_CONFIG: Record<string, ProviderToggle> = {
+  googleNews: { enabled: true },
+  gdelt: { enabled: true },
+  publisherRss: { enabled: true },
+  reddit: {
+    enabled: Boolean(process.env.REDDIT_CLIENT_ID && process.env.REDDIT_CLIENT_SECRET),
+    reason: "Requires REDDIT_CLIENT_ID + REDDIT_CLIENT_SECRET",
+  },
+  // The old googleTrends "trendingsearches/daily/rss" endpoint is dead
+  // (404) and there's no free replacement -- left disabled rather than
+  // pointed at a fake source. See providers/googleTrends.ts.
+  googleTrends: { enabled: false, reason: "No working free endpoint; needs a paid Trends API integration" },
+};
+
+export const CACHE_TTL_MS: Record<string, number> = {
+  googleNews: 7 * 60 * 1000,
+  gdelt: 12 * 60 * 1000,
+  publisherRss: 5 * 60 * 1000,
+  reddit: 10 * 60 * 1000,
+  default: 5 * 60 * 1000,
+};
+
+/** How long a failed provider is skipped before being retried (exponential, capped). */
+export const BACKOFF_SCHEDULE_MS = [30_000, 60_000, 5 * 60_000, 15 * 60_000, 30 * 60_000];
+
+/** Articles older than this are dropped from clustering entirely, unless a cluster containing them is still actively growing. */
+export const MAX_ARTICLE_AGE_HOURS = 48;
+
+/** How long raw articles are retained in the DB before cleanup. */
+export const ARTICLE_RETENTION_HOURS = 72;

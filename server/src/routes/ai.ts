@@ -21,6 +21,9 @@ const generateSchema = z.object({
     sourceUrl: z.string().url(),
     source: z.string().min(1),
     category: z.string().optional(),
+    score: z.number().optional(),
+    sourceCount: z.number().optional(),
+    publishedAt: z.string().optional(),
   }),
 });
 

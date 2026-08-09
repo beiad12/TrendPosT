@@ -1,74 +1,136 @@
-export interface ScorableTrend {
-  title: string;
-  publishedAt: Date | null;
-  /** how many distinct outlets/feeds are already carrying this same story */
-  duplicateCount?: number;
+import {
+  CATEGORIES,
+  MOROCCO_HIGH_RELEVANCE,
+  MOROCCO_MEDIUM_RELEVANCE,
+  SCORE_WEIGHTS,
+  VIRAL_SIGNALS,
+} from "./config.js";
+import type { UnscoredCluster } from "./clustering.js";
+import type { ScoreBreakdown, TrendCluster, TrendType } from "./types.js";
+
+/** Freshness decay curve (spec §13) — recency measured from the earliest known publish time, falling back to discovery time. */
+function freshnessFactor(ageMinutes: number, isAccelerating: boolean): number {
+  if (ageMinutes < 30) return 1.0;
+  if (ageMinutes < 60) return 0.9;
+  if (ageMinutes < 180) return 0.75;
+  if (ageMinutes < 360) return 0.55;
+  if (ageMinutes < 720) return 0.35;
+  if (ageMinutes < 1440) return 0.15;
+  return isAccelerating ? 0.08 : 0; // older than 24h: excluded from meaningful scoring unless still actively accelerating
 }
 
-const EMOTIONAL_KEYWORDS: { category: string; weight: number; words: RegExp }[] = [
-  { category: "outrage", weight: 22, words: /(scandale|colère|indign|احتجاج|فضيحة|غضب)/i },
-  { category: "shock", weight: 20, words: /(choc|dramatique|mort|accident|صدمة|وفاة|حادث)/i },
-  { category: "national-pride", weight: 17, words: /(maroc|marocain|drapeau|المغرب|مغربي|منتخب)/i },
-  { category: "sports", weight: 14, words: /(foot|match|but|championnat|كرة|مباراة|هدف)/i },
-  { category: "celebrity", weight: 11, words: /(star|célébrité|artiste|فنان|نجم|مشهور)/i },
-  { category: "humor", weight: 9, words: /(insolite|drôle|humour|طريف|مضحك)/i },
-];
-
-/** Recency decay: fresh news scores near 1.0, decaying toward 0 after ~48h. */
-function recencyFactor(publishedAt: Date | null): number {
-  if (!publishedAt) return 0.5;
-  const hours = (Date.now() - publishedAt.getTime()) / 3_600_000;
-  if (hours <= 0) return 1;
-  const halfLifeHours = 18;
-  return Math.max(0, Math.pow(0.5, hours / halfLifeHours));
-}
-
-function emotionalScore(title: string): { score: number; category: string } {
-  for (const e of EMOTIONAL_KEYWORDS) {
-    if (e.words.test(title)) return { score: e.weight, category: e.category };
-  }
-  return { score: 6, category: "general" };
+/** More independent outlets/platforms carrying the same story = a stronger, more corroborated signal (spec §14). Domains are already deduped by clustering.ts. */
+function sourceCountFactor(sourceCount: number): number {
+  if (sourceCount <= 1) return 0.25;
+  if (sourceCount === 2) return 0.5;
+  if (sourceCount <= 4) return 0.8;
+  return 1.0;
 }
 
 /**
- * RSS feeds don't give us real engagement numbers (shares/comments), so
- * "momentum" is approximated from how many outlets are already carrying the
- * same story, split into two opposing effects:
- *  - a small, quickly-capped bonus for the first couple of corroborating
- *    outlets (independent validation this is a real, currently-breaking story)
- *  - a penalty that only kicks in once *many* outlets have it (posting now
- *    adds little novelty)
+ * How quickly new coverage is appearing (spec §15) — computed from real
+ * `discoveredAt` timestamps accumulated across fetch cycles (see
+ * articleStore.ts), not just a single snapshot's article count. On a
+ * freshly-seeded database every article looks "brand new" (no prior-hour
+ * baseline yet) — that's an honest cold-start, not a fabricated number; it
+ * self-corrects as more fetch cycles accumulate real history.
  */
-function corroborationBonus(duplicateCount: number): number {
-  return Math.min(8, duplicateCount * 4);
+function velocity(articles: { discoveredAt: string }[], now: number): { velocityPerHour: number; factor: number } {
+  const lastHour = articles.filter((a) => now - new Date(a.discoveredAt).getTime() <= 3_600_000).length;
+  const priorHour = articles.filter((a) => {
+    const age = now - new Date(a.discoveredAt).getTime();
+    return age > 3_600_000 && age <= 7_200_000;
+  }).length;
+
+  const growthRatio = priorHour === 0 ? (lastHour > 0 ? 2 : 0) : lastHour / priorHour;
+  const factor = Math.max(0, Math.min(1, lastHour / 6 + Math.max(0, growthRatio - 1) * 0.25));
+  return { velocityPerHour: lastHour, factor };
 }
 
-function saturationPenalty(duplicateCount: number): number {
-  return Math.min(15, Math.max(0, duplicateCount - 3) * 3);
+function moroccoRelevanceFactor(text: string): number {
+  if (MOROCCO_HIGH_RELEVANCE.test(text)) return 1.0;
+  if (MOROCCO_MEDIUM_RELEVANCE.test(text)) return 0.5;
+  return 0.15;
 }
 
-export interface ScoreResult {
-  score: number; // 0-100
-  explanation: string;
+/**
+ * No real Facebook/social engagement API is wired up (would require Page
+ * Insights access this project doesn't have) — as an honest proxy, a
+ * story already validated by Reddit's own "hot" ranking counts for
+ * something; everything else gets a conservative baseline rather than a
+ * fabricated number.
+ */
+function socialFactor(articles: { provider: string }[]): number {
+  return articles.some((a) => a.provider.startsWith("reddit:")) ? 1.0 : 0.3;
 }
 
-export function scoreTrend(t: ScorableTrend): ScoreResult {
-  const recency = recencyFactor(t.publishedAt); // 0..1
-  const { score: emoScore, category } = emotionalScore(t.title);
-  const duplicateCount = t.duplicateCount ?? 0;
-  const corroboration = corroborationBonus(duplicateCount);
-  const saturation = saturationPenalty(duplicateCount);
+function classifyCategory(text: string) {
+  for (const cat of CATEGORIES) {
+    if (cat.key === "morocco") continue; // catch-all, checked last
+    if (cat.keywords.test(text)) return cat;
+  }
+  return CATEGORIES.find((c) => c.key === "morocco")!;
+}
 
-  const base = recency * 50 + emoScore + corroboration;
-  const score = Math.max(0, Math.min(100, Math.round(base - saturation)));
+function viralPotentialFactor(text: string): number {
+  let hit = 0;
+  for (const signal of VIRAL_SIGNALS) {
+    if (signal.words.test(text)) hit += signal.weight;
+  }
+  return Math.min(1, hit / 20); // 20 = roughly two strong signals firing together
+}
 
-  const corroborationLabel =
-    duplicateCount === 0 ? "single source" : duplicateCount <= 2 ? "corroborated" : "widely covered";
-  const saturationLabel = saturation > 0 ? "high saturation" : "low saturation";
-  const recencyLabel = recency > 0.7 ? "very fresh" : recency > 0.3 ? "recent" : "aging";
+function classifyTrendType(ageMinutes: number, sourceCount: number, velocityPerHour: number, totalScore: number): TrendType {
+  if (ageMinutes <= 60 && velocityPerHour >= 3) return "BREAKING";
+  if (totalScore >= 75) return "VIRAL";
+  if (velocityPerHour >= 2) return "RISING";
+  if (sourceCount >= 3) return "POPULAR";
+  return "STABLE";
+}
 
-  const emoji = score >= 70 ? "🔥" : score >= 40 ? "📈" : "🕓";
-  const explanation = `${emoji} ${recencyLabel}, ${corroborationLabel}, ${saturationLabel}, ${category.replace("-", " ")} appeal`;
+/**
+ * Scores a story cluster 0-100 across the weighted factors in
+ * config.ts#SCORE_WEIGHTS, classifies its category and trend type, and
+ * returns the fully-formed TrendCluster the rest of the app consumes.
+ */
+export function scoreCluster(cluster: UnscoredCluster, now: Date = new Date()): TrendCluster {
+  const nowMs = now.getTime();
+  const text = `${cluster.title} ${cluster.description ?? ""}`;
 
-  return { score, explanation };
+  const referenceTime = cluster.publishedAt ?? cluster.discoveredAt;
+  const ageMinutes = Math.max(0, (nowMs - new Date(referenceTime).getTime()) / 60_000);
+
+  const { velocityPerHour, factor: velocityFactorValue } = velocity(cluster.articles, nowMs);
+  const isAccelerating = velocityFactorValue > 0.5;
+
+  const category = classifyCategory(text);
+
+  const breakdown: ScoreBreakdown = {
+    freshness: Math.round(freshnessFactor(ageMinutes, isAccelerating) * SCORE_WEIGHTS.freshness),
+    sourceCount: Math.round(sourceCountFactor(cluster.sourceCount) * SCORE_WEIGHTS.sourceCount),
+    velocity: Math.round(velocityFactorValue * SCORE_WEIGHTS.velocity),
+    moroccoRelevance: Math.round(moroccoRelevanceFactor(text) * SCORE_WEIGHTS.moroccoRelevance),
+    social: Math.round(socialFactor(cluster.articles) * SCORE_WEIGHTS.social),
+    category: Math.round(category.importance * SCORE_WEIGHTS.category),
+    viralPotential: Math.round(viralPotentialFactor(text) * SCORE_WEIGHTS.viralPotential),
+    total: 0,
+  };
+  breakdown.total = Math.min(
+    100,
+    breakdown.freshness + breakdown.sourceCount + breakdown.velocity + breakdown.moroccoRelevance + breakdown.social + breakdown.category + breakdown.viralPotential
+  );
+
+  const trendType = classifyTrendType(ageMinutes, cluster.sourceCount, velocityPerHour, breakdown.total);
+
+  return {
+    ...cluster,
+    categoryKey: category.key,
+    categoryLabel: category.label,
+    categoryEmoji: category.emoji,
+    score: breakdown.total,
+    scoreBreakdown: breakdown,
+    trendType,
+    ageMinutes: Math.round(ageMinutes),
+    velocityPerHour,
+  };
 }

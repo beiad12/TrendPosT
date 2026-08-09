@@ -9,6 +9,7 @@ import {
 } from "../lib/api.js";
 import RenderPanel from "./RenderPanel.js";
 import AutoPostPanel from "./AutoPostPanel.js";
+import ScoreBreakdownPanel from "./ScoreBreakdownPanel.js";
 
 const LANGUAGES: { value: Language; label: string }[] = [
   { value: "darija", label: "Darija" },
@@ -45,6 +46,9 @@ export default function TrendDetailModal({ trend, onClose }: { trend: Trend; onC
           sourceUrl: trend.url,
           source: trend.source,
           category: trend.category,
+          score: trend.score,
+          sourceCount: trend.sourceCount,
+          publishedAt: trend.publishedAt ?? undefined,
         },
       });
       const next: typeof variantsByProvider = {};
@@ -86,6 +90,8 @@ export default function TrendDetailModal({ trend, onClose }: { trend: Trend; onC
             ×
           </button>
         </div>
+
+        {trend.scoreBreakdown && <ScoreBreakdownPanel breakdown={trend.scoreBreakdown} />}
 
         <div className="flex gap-2 mb-4">
           <button

@@ -6,11 +6,18 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const sqlitePath = process.env.SQLITE_PATH || "./data/trendpost.db";
-const resolved = path.isAbsolute(sqlitePath)
+// SQLite's special in-memory identifiers (":memory:", "") must be passed
+// through untouched -- path.join()-ing them against cwd would otherwise
+// create a literal file named e.g. ":memory:" on disk, silently defeating
+// the whole point of an ephemeral test/in-memory database.
+const isSpecialPath = sqlitePath === ":memory:" || sqlitePath === "";
+const resolved = isSpecialPath
+  ? sqlitePath
+  : path.isAbsolute(sqlitePath)
   ? sqlitePath
   : path.join(process.cwd(), sqlitePath);
 
-fs.mkdirSync(path.dirname(resolved), { recursive: true });
+if (!isSpecialPath) fs.mkdirSync(path.dirname(resolved), { recursive: true });
 
 // Uses Node's built-in sqlite module (no native/compiled dependency — works
 // out of the box on every OS, no Visual Studio / build-essential required).

@@ -15,6 +15,10 @@ export interface TrendInput {
   sourceUrl: string;
   source: string;
   category?: string;
+  /** Extra grounding context from the trend engine, when available — never fabricated if missing. */
+  score?: number;
+  sourceCount?: number;
+  publishedAt?: string;
 }
 
 export interface CaptionRequest {

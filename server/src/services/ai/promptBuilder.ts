@@ -30,7 +30,7 @@ export function buildUserPrompt(req: CaptionRequest): string {
 - Title: ${trend.title}
 - Summary: ${trend.summary ?? "(no summary provided, infer from title)"}
 - Source: ${trend.source} (${trend.sourceUrl})
-- Category: ${trend.category ?? "general"}
+- Category: ${trend.category ?? "general"}${trend.sourceCount ? `\n- Corroborated by ${trend.sourceCount} independent source(s)` : ""}${trend.score !== undefined ? `\n- Trend score: ${trend.score}/100` : ""}${trend.publishedAt ? `\n- Published: ${trend.publishedAt}` : ""}
 
 Target language: ${LANGUAGE_LABEL[req.language]}
 

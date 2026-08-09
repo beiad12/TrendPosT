@@ -28,6 +28,33 @@ CREATE TABLE IF NOT EXISTS trends_cache (
   fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Every raw article the trend engine has ever fetched from any provider
+-- (Google News, GDELT, publisher RSS, Reddit), deduped by id (a hash of its
+-- cleaned URL). This is what makes velocity real instead of guessed: a
+-- story's discovered_at timestamps accumulate across fetch cycles, so
+-- "how fast is coverage growing" is measured from actual history, not a
+-- single snapshot. It also doubles as the stale-while-revalidate cache --
+-- if every live provider fails on a given refresh, clustering/scoring still
+-- runs against whatever's recent in this table.
+CREATE TABLE IF NOT EXISTS trend_articles (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  url TEXT NOT NULL,
+  source TEXT NOT NULL,
+  source_domain TEXT,
+  published_at TEXT,
+  discovered_at TEXT NOT NULL,
+  language TEXT,
+  country TEXT,
+  category_hint TEXT,
+  description TEXT,
+  image_url TEXT,
+  keywords_json TEXT NOT NULL DEFAULT '[]',
+  provider TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_trend_articles_discovered ON trend_articles (discovered_at DESC);
+
 CREATE TABLE IF NOT EXISTS generated_posts (
   id TEXT PRIMARY KEY,
   trend_id TEXT,

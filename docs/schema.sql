@@ -63,5 +63,27 @@ CREATE TABLE IF NOT EXISTS branding (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Every raw article the trend engine has ever fetched from any provider
+-- (Google News, GDELT, publisher RSS, Reddit), deduped by id (a hash of its
+-- cleaned URL). Real velocity tracking + stale-while-revalidate cache --
+-- see server/src/db/schema.sqlite.sql for the full rationale.
+CREATE TABLE IF NOT EXISTS trend_articles (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  url TEXT NOT NULL,
+  source TEXT NOT NULL,
+  source_domain TEXT,
+  published_at TIMESTAMPTZ,
+  discovered_at TIMESTAMPTZ NOT NULL,
+  language TEXT,
+  country TEXT,
+  category_hint TEXT,
+  description TEXT,
+  image_url TEXT,
+  keywords_json JSONB NOT NULL DEFAULT '[]',
+  provider TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_trend_articles_discovered ON trend_articles (discovered_at DESC);
 CREATE INDEX IF NOT EXISTS idx_trends_score ON trends_cache (score DESC);
 CREATE INDEX IF NOT EXISTS idx_posts_status ON generated_posts (status);

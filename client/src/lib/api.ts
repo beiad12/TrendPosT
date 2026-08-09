@@ -1,3 +1,16 @@
+export type TrendType = "BREAKING" | "RISING" | "VIRAL" | "POPULAR" | "STABLE";
+
+export interface ScoreBreakdown {
+  freshness: number;
+  sourceCount: number;
+  velocity: number;
+  moroccoRelevance: number;
+  social: number;
+  category: number;
+  viralPotential: number;
+  total: number;
+}
+
 export interface Trend {
   id: string;
   source: string;
@@ -9,6 +22,39 @@ export interface Trend {
   category: string;
   score: number;
   scoreExplanation: string;
+  summary: string | null;
+  sourceCount: number;
+  sources: string[];
+  trendType: TrendType;
+  categoryEmoji: string;
+  ageMinutes: number;
+  velocityPerHour: number;
+  scoreBreakdown: ScoreBreakdown;
+  articleCount: number;
+}
+
+export type ProviderHealthStatus = "healthy" | "degraded" | "unavailable" | "not_configured";
+
+export interface ProviderHealth {
+  id: string;
+  name: string;
+  status: ProviderHealthStatus;
+  lastSuccess: string | null;
+  lastFailure: string | null;
+  lastAttempt: string | null;
+  errorCount: number;
+  latencyMs: number | null;
+  itemsFetched: number;
+  lastError: string | null;
+  nextRetryAt: string | null;
+}
+
+export interface TrendsResponse {
+  trends: Trend[];
+  generatedAt: string;
+  sources: string[];
+  sourceHealth: ProviderHealth[];
+  warning?: "no_live_data" | "showing_cached" | "refresh_failed_showing_cached";
 }
 
 export type Provider = "anthropic" | "openai" | "mistral" | "google" | "xai";
@@ -157,8 +203,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   trends: {
-    list: (refresh = false) =>
-      request<{ fetchedAt: string; trends: Trend[] }>(`/trends${refresh ? "?refresh=1" : ""}`),
+    list: (params: { refresh?: boolean; category?: string; language?: string; status?: string; limit?: number } = {}) => {
+      const qs = new URLSearchParams();
+      if (params.refresh) qs.set("refresh", "1");
+      if (params.category) qs.set("category", params.category);
+      if (params.language) qs.set("language", params.language);
+      if (params.status) qs.set("status", params.status);
+      if (params.limit) qs.set("limit", String(params.limit));
+      const query = qs.toString();
+      return request<TrendsResponse>(`/trends${query ? `?${query}` : ""}`);
+    },
+    detail: (id: string) =>
+      request<{ trend: Trend; articles: unknown[]; sources: string[]; scoreBreakdown: ScoreBreakdown }>(`/trends/${id}`),
+    refresh: () => request<TrendsResponse>("/trends/refresh", { method: "POST" }),
   },
   settings: {
     listKeys: () => request<{ providers: ProviderStatus[] }>("/settings/keys"),
@@ -176,7 +233,16 @@ export const api = {
   ai: {
     generate: (body: {
       provider?: Provider;
-      trend: { title: string; summary?: string; sourceUrl: string; source: string; category?: string };
+      trend: {
+        title: string;
+        summary?: string;
+        sourceUrl: string;
+        source: string;
+        category?: string;
+        score?: number;
+        sourceCount?: number;
+        publishedAt?: string;
+      };
       language: Language;
       tones?: Tone[];
     }) =>
@@ -225,7 +291,17 @@ export const api = {
   },
   autoPost: {
     generate: (body: {
-      trend: { title: string; summary?: string; sourceUrl: string; source: string; category?: string; imageUrl: string };
+      trend: {
+        title: string;
+        summary?: string;
+        sourceUrl: string;
+        source: string;
+        category?: string;
+        imageUrl: string;
+        score?: number;
+        sourceCount?: number;
+        publishedAt?: string;
+      };
       provider: Provider;
       language: Language;
       templateId?: string;

@@ -24,13 +24,14 @@ together).
 | **Template editor UI** | ✅ Upload any PNG/JPG as the background, add as many text or photo zones as your design needs, drag each into place, configure per-zone alignment/weight/color/highlight-color/locked/default-value/pill-background. Not hardcoded to any fixed shape — a "Quick add" preset just pre-fills the common Photo/Category/Headline/Description/CTA set. |
 | **AI zone detection** | ✅ "✨ Auto-detect zones with AI" — Claude's vision looks at your uploaded artwork and proposes a starting set of zones (photo + text placeholders, with type/alignment inferred) instead of dragging every rectangle by hand; you review/adjust before saving. Requires an Anthropic key in Settings. |
 | **"Maroc Viral" brand template** | ✅ The brand's actual design system (colors, gradients, Cairo/Montserrat fonts, layout) implemented as a real, working 5-zone template (Photo, Category, Headline, Description, CTA) — auto-seeded on first boot in Arabic + French. See "The Maroc Viral template" below. |
-| **Trend discovery (multi-source)** | ✅ Combines Moroccan news RSS (Hespress, Le360, H24Info, Akhbarona), **Google Trends Morocco** (`trends.google.com/.../daily/rss?geo=MA`), and **Reddit r/Morocco** (public `hot.json` listing) into one unified, ranked dashboard feed — each source fetched independently (`Promise.allSettled`) so one dead feed never takes the others down. See "Trend sources" below. |
-| **Virality scoring** | ✅ Momentum, emotional-category keyword detection, recency decay, cross-source corroboration bonus + saturation penalty (computed across *all* sources together, not per-source) → 0–100 score + human-readable explanation. |
+| **Trend engine (provider-based, multi-source)** | ✅ A real "what's worth posting right now" engine, not an RSS reader: Google News search + GDELT + Moroccan publisher RSS feeds (optionally Reddit) are fetched independently, normalized, deduped, **clustered into one trend per real-world story** (multi-outlet corroboration counted once), then scored 0–100 on freshness/source-count/velocity/Morocco-relevance/category/viral-potential. Every provider tracks its own health (healthy/degraded/unavailable/not_configured) with backoff, so a dead endpoint never crashes the dashboard or spams retries. See "Trend engine" below. |
+| **Virality scoring, explainable** | ✅ Weighted 0–100 score (freshness, source count, velocity, Morocco relevance, social, category, viral potential) with a per-factor breakdown shown in the UI — not a black-box number. Classifies each trend as BREAKING / RISING / VIRAL / POPULAR / STABLE. |
 | **Multi-AI caption generator** | ✅ Unified router for Claude / GPT / Mistral / Gemini / Grok behind one interface; "Compare All" mode; 5 tone variants × 3 language options + hashtags + suggested post time. |
 | **Encrypted API-key vault** | ✅ AES-256-GCM at rest, per-provider, Settings UI, keys never logged or echoed back. |
 | **Page logo watermark** | ✅ Upload your page's logo once in Settings; it's stamped automatically onto every rendered post (AI Auto Post *and* manual templates) at a configurable corner — no per-post setup. See "Page logo" below. |
 | **Dashboard UI** | ✅ Ranked trend list → caption generation modal → template + headline + photo → live render preview → download. |
-| X/Twitter trending source | 🚧 Not wired — X's trending-topics data requires a paid API tier (no free/no-key public endpoint exists the way Google Trends and Reddit have one). The extension point is documented in `server/src/services/trends/aggregator.ts`; it's intentionally not stubbed with fake data. |
+| X/Twitter trending source | 🚧 Not wired — X's trending-topics data requires a paid API tier (no free/no-key public endpoint exists the way Google News/GDELT have one). The extension point is documented in `server/src/services/trends/aggregator... engine.ts` and `providers/index.ts`; it's intentionally not stubbed with fake data. |
+| Google Trends | 🚧 Google discontinued the free public "daily trends" RSS this project used to call (now 404s everywhere) — there's no other free/no-key replacement. Reports `not_configured` rather than being faked; wired as a real optional provider (`providers/googleTrends.ts`) ready for a paid Trends API integration. |
 | Facebook Graph API (Page Insights, OAuth, direct publish) | 🚧 Not implemented — publishing today is "download + copy caption"; see `docs/SPEC.md` §5 for the target flow. |
 | Scheduling / content calendar | 🚧 Schema has a `status`/`scheduled_for` column on `generated_posts` (see `docs/schema.sql`) but no queue worker yet. |
 | Production Postgres | 🚧 Dev server uses bundled SQLite (zero setup). `docs/schema.sql` is the Postgres-equivalent schema for swapping in production — see below. |
@@ -42,7 +43,10 @@ together).
 ```
 client/   React + Vite + Tailwind — dashboard, template editor, settings
 server/   Node + Express + TypeScript
-  src/services/trends/    Multi-source ingestion (RSS + Google Trends + Reddit) + normalization + virality scoring
+  src/services/trends/    Provider-based trend engine — see "Trend engine" below
+    providers/             Google News, GDELT, publisher RSS, Reddit*, Google Trends* (*optional)
+    engine.ts               orchestrator: fetch -> persist -> cluster -> score -> cache/fallback
+    clustering.ts, scoring.ts, normalize.ts, sourceHealth.ts, articleStore.ts
   src/services/brandingStore.ts  Global page-logo settings (singleton row), used by the render pipeline
   src/services/ai/        Provider adapters (anthropic/openai/mistral/google/xai)
                            behind one router: {trend, tone, language, provider} -> captions
@@ -227,8 +231,15 @@ Then open http://localhost:5173:
 ### Running tests
 
 ```bash
-cd server && npm test        # renderEngine end-to-end compositing test (vitest)
+cd server && npm test
 ```
+
+62 tests: the renderEngine end-to-end compositing test, plus the trend
+engine's suite (normalization, clustering/dedup, scoring, per-source health
++ backoff, provider failure isolation — 403/404/timeout/malformed JSON all
+mocked, no live network required, so `npm test` never depends on any
+external site being up). Uses an in-memory SQLite DB (`vitest.config.ts` →
+`src/test/setupEnv.ts`) so tests never touch your real dev data.
 
 ### Production DB (Postgres)
 
@@ -243,38 +254,60 @@ pre-loaded with it for testing that swap.
 
 ---
 
-## Trend sources
+## Trend engine
 
-`server/src/services/trends/aggregator.ts` fans out to every configured
-source and combines them into one ranked feed (`fetchAllTrends()`) —
-covering Moroccan news, worldwide trending topics, and what's going viral
-right now, not just one country's headlines:
+`server/src/services/trends/` is a provider-based **"what's worth turning
+into a Maroc Viral post right now"** engine, not an RSS reader. It answers
+that question by running every enabled source, merging what they find into
+one deduplicated, scored, ranked list, and never letting one dead source
+take the whole dashboard down.
 
-| Source | Module | Covers |
+```
+Source Providers (Google News, GDELT, Publisher RSS, Reddit*, Google Trends*)
+    ↓ normalize.ts     — clean URLs, strip tracking params, Arabic/French text normalization
+    ↓ articleStore.ts  — persist to trend_articles (dedup by URL hash; this IS the cache)
+    ↓ clustering.ts    — group articles about the same story (title-similarity + time window)
+    ↓ scoring.ts        — freshness / sources / velocity / Morocco relevance / category / viral potential → 0-100
+    ↓ engine.ts          — orchestrates providers, owns the cache/backoff/fallback logic
+    ↓ trendMapper.ts      — flattens a cluster to what the client/AutoPost/AI already consume
+GET/POST /api/trends*     — the API surface
+```
+*optional, gated by config/env
+
+### Providers (`server/src/services/trends/providers/`)
+
+| Provider | id | What it is |
 |---|---|---|
-| Moroccan news RSS | `rssService.ts` (feed list in `sources.ts`) | Hespress (FR+AR), Le360, H24Info, Akhbarona — Morocco's own news cycle. |
-| Google Trends — Morocco, Worldwide (US), France | `sources/googleTrends.ts` (`GOOGLE_TRENDS_GEOS`) | Google's daily trending-searches RSS is per-country (there's no single "global" geo code), so `GOOGLE_TRENDS_GEOS` fans out across MA + a couple of the world's highest-traffic geos as a free "what's trending in the world" proxy. Add more geo codes to that array to cover more countries. |
-| Reddit r/Morocco + r/popular | `sources/reddit.ts` (`REDDIT_SOURCES`) | r/Morocco for local discussion, **r/popular** — Reddit's own cross-site "hot right now" front page — as the free "what's going viral" signal. |
+| **Google News** | `google_news` | `news.google.com/rss/search` (a *different, still-working* endpoint from the old dead `trendingsearches/daily/rss` one) fanned out across configurable query groups — Morocco Arabic, Morocco French, Maroc viral/buzz, Moroccan sports, and Morocco-international stories (`config.ts#GOOGLE_NEWS_QUERY_GROUPS`). Primary source. |
+| **GDELT** | `gdelt` | GDELT DOC 2.0 (`api.gdeltproject.org`), an independent news-monitoring index — free, no key, not affiliated with Google or Reddit. Queried for Morocco/Maroc/politics/sports/entertainment. |
+| **Publisher RSS** | `publisher_rss` | Known Moroccan outlets' own feeds (Hespress, Le360, H24Info, Akhbarona, Morocco World News, TelQuel, Médias24 — `sources.ts`), now a *secondary* signal. Each feed is tracked and backed off **individually** — one 403ing feed doesn't affect the others, and it stops being retried every request once it's failed a few times. |
+| **Reddit** | `reddit` (optional) | r/Morocco + r/popular via Reddit's real OAuth `client_credentials` flow (their public JSON endpoints now reject most non-browser clients). Requires `REDDIT_CLIENT_ID` + `REDDIT_CLIENT_SECRET` (free "script" app) — reports `not_configured` and is skipped entirely without them, never an error. |
+| **Google Trends** | `google_trends` (disabled) | Google discontinued the free "daily trends" RSS this project used to call. No fake replacement — reports `not_configured` until a real (paid) Trends API is wired into `providers/googleTrends.ts`. |
 
-Each source is fetched independently (`Promise.allSettled`) so one being down
-just means fewer results, not a failed request — and **every failure is
-logged to the server console** as `[trends] source "<name>" failed: <reason>`
-(and `[trends] RSS feed "<name>" failed: <reason>` for individual RSS
-outlets), so if a source ever goes quiet on your dashboard, check the server
-console first; it names exactly which source and why (HTTP status, DNS
-failure, timeout, etc.) instead of silently vanishing from the list.
+Add a new source by writing a module implementing `TrendProvider` (`providers/types.ts`) and appending it to `ALL_PROVIDERS` in `providers/index.ts` — nothing else needs to change.
 
-Cross-source duplicate titles feed into the same corroboration/saturation
-scoring as before — a story trending on Google *and* covered by two outlets
-*and* posted to Reddit scores its corroboration bonus once, across all
-sources, not per-source.
+### Resilience
 
-Adding a new source: write a module returning
-`Omit<NormalizedTrend, "score" | "scoreExplanation">[]` (see the examples
-above) and add it to the `buildFetchers()` list in `aggregator.ts`.
-X/Twitter's trending-topics data needs a paid API tier — there's no free
-public endpoint for it — so it's documented as the next extension point
-there rather than faked.
+- Every provider is called via `Promise.allSettled` — one failing never blocks another, and the engine never throws on a bad source.
+- Per-provider (and per individual RSS feed) **health tracking with exponential backoff** (`sourceHealth.ts`): a failing source is skipped for 30s → 60s → 5min → 15min → 30min instead of being hammered on every request, and flips from `degraded` to `unavailable` after repeated failures.
+- **Structured logs**, not error spam: `[TrendEngine] {"provider":"h24info","status":"unavailable","code":403,...}` — one line per event, parseable, never a stack trace for a routine "this source is down" case.
+- **Stale-while-revalidate cache**: fetched articles persist to the `trend_articles` table (deduped by a hash of the cleaned URL, original `discovered_at` preserved on refetch). If every live provider fails on a given request, clustering/scoring still runs against whatever's recent in that table — the dashboard shows a `showing_cached`/`no_live_data` warning banner instead of either crashing or silently pretending everything's fine.
+- No fake data, ever: if there's genuinely nothing recent, the API returns an empty list and the dashboard shows *"Pas assez de données récentes / لا توجد بيانات كافية حالياً"* — never fabricated trends.
+
+### Clustering & scoring
+
+- **Deduplication**: exact same article (even fetched by two different providers) is merged by a stable id derived from its cleaned URL.
+- **Story clustering** (`clustering.ts`): near-duplicate headlines about the same real event — e.g. "Le Maroc annonce une réforme" / "Une réforme annoncée au Maroc" / "Le gouvernement dévoile la réforme" — merge into **one** trend with `sourceCount` counting distinct outlet *domains*, not article count. Uses token-set similarity (with light Arabic/French stemming — Arabic case endings like "مشروعاً" vs "مشروع" are the same word for this purpose) within a rolling time window, not a crude "same first 40 characters" check.
+- **Scoring** (`scoring.ts`, weights in `config.ts#SCORE_WEIGHTS`, all sum to 100): Freshness (20, recency-decay curve) + Source Count (20, more independent outlets = stronger signal) + Velocity (20, computed from *real* `discovered_at` history accumulated across fetch cycles — how fast new coverage is actually appearing, not a single snapshot) + Morocco Relevance (15, keyword-weighted) + Social (10, honest proxy — no Facebook Insights API is wired up) + Category (5) + Viral Potential (10, breaking/shock/national-pride/crime/celebrity/etc. keyword signals). Every trend also gets a `trendType`: BREAKING / RISING / VIRAL / POPULAR / STABLE.
+- The score is **explainable**, not a black box — the dashboard shows the full per-factor breakdown when you open a trend.
+
+### API
+
+- `GET /api/trends?country=&language=&category=&limit=&minScore=&hours=&status=&refresh=1` — the ranked list, filterable; `refresh=1` bypasses the cache.
+- `GET /api/trends/:id` — one trend's full detail: every supporting article, its sources, and the score breakdown.
+- `POST /api/trends/refresh` — manually triggers a live refresh across every provider.
+
+Every response includes `sourceHealth` (what the client's "Trend sources" panel on the dashboard renders) and, when relevant, a `warning` field (`showing_cached` / `no_live_data` / `refresh_failed_showing_cached`).
 
 ## Page logo
 
