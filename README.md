@@ -21,6 +21,7 @@ together).
 |---|---|
 | **Template & image rendering engine** | ✅ Layer-based: any number of text/photo zones, each with its own alignment/weight/color, composited on top of a **locked, pixel-perfect background artwork** — your upload never needs any special transparency to work. `**word**` → per-zone highlight color, auto-fit/auto-wrap via real font metrics (Pango), correct Arabic shaping (Cairo) and Latin (Montserrat), flattened export at Facebook feed size. |
 | **Template editor UI** | ✅ Upload any PNG/JPG as the background, add as many text or photo zones as your design needs, drag each into place, configure per-zone alignment/weight/color/highlight-color/locked/default-value/pill-background. Not hardcoded to any fixed shape — a "Quick add" preset just pre-fills the common Photo/Category/Headline/Description/CTA set. |
+| **AI zone detection** | ✅ "✨ Auto-detect zones with AI" — Claude's vision looks at your uploaded artwork and proposes a starting set of zones (photo + text placeholders, with type/alignment inferred) instead of dragging every rectangle by hand; you review/adjust before saving. Requires an Anthropic key in Settings. |
 | **"Maroc Viral" brand template** | ✅ The brand's actual design system (colors, gradients, Cairo/Montserrat fonts, layout) implemented as a real, working 5-zone template (Photo, Category, Headline, Description, CTA) — auto-seeded on first boot in Arabic + French. See "The Maroc Viral template" below. |
 | **Trend discovery (RSS)** | ✅ Hespress, Le360, H24Info, Akhbarona feeds parsed and normalized; tolerant of individual feed failures. |
 | **Virality scoring** | ✅ Momentum, emotional-category keyword detection, recency decay, cross-source saturation penalty → 0–100 score + human-readable explanation. |
@@ -90,6 +91,28 @@ normalizes the response into a shared `CaptionResult` shape. `POST
 provider at once ("Compare All"), returning per-provider success/failure so
 the UI can show an "add your API key" prompt for anything unconfigured.
 
+### AI zone detection (`server/src/services/ai/zoneDetection.ts`)
+
+`POST /api/templates/detect-zones` takes an uploaded template image and
+sends it to Claude's vision API (`claude-sonnet-5`), asking it to identify
+placeholder areas — a photo box, and text zones such as a category
+label/badge, headline, description, or CTA button — and return their
+bounding boxes as strict JSON, in pixel coordinates against the image size
+it was shown. Oversized uploads are downscaled before the request (to stay
+under Anthropic's recommended max vision input dimension) and the returned
+coordinates are scaled back up to the original resolution. Each detected
+zone's `type` (text/photo) is taken directly from the model; a zone's
+styling (weight, pill background, category-dot prefix) is inferred from
+its `id`/`label` via `detectedZonesToDefs()`.
+
+This is a **first-draft assist**, not a blind-trust step: the detected
+zones populate the same editable zone list the manual "+ Text zone" flow
+produces, so you review, tweak, or redraw any of them (drag to reposition)
+before saving — vision-model coordinate grounding is good but not
+pixel-perfect. Requires an Anthropic API key configured in Settings; if
+none is set, the endpoint returns `400 {error: "missing_api_key"}` and the
+UI prompts you to add one.
+
 ### The "Maroc Viral" template
 
 `server/src/services/render/brand.ts` holds the brand's design tokens
@@ -158,8 +181,10 @@ npm run dev           # http://localhost:5173 (proxies /api and /static to :4000
 
 Then open http://localhost:5173:
 1. **Settings** — paste API key(s) for whichever AI providers you have.
-2. **Templates** — upload your branded artwork, add photo/text zones (or
-   use the Maroc Viral quick-add preset) and drag each into place, save.
+2. **Templates** — upload your branded artwork, then click "✨ Auto-detect
+   zones with AI" (needs an Anthropic key from step 1) to have Claude
+   propose a starting layout, or add zones manually / use the Maroc Viral
+   quick-add preset. Adjust as needed and save.
 3. **Dashboard** — trending topics (once RSS feeds are reachable from your
    network) → generate captions → render onto your template → download.
 

@@ -84,6 +84,7 @@ export default function Templates() {
   const [activeZoneId, setActiveZoneId] = useState<string | null>(null);
   const [canvasBackground, setCanvasBackground] = useState("");
   const [busy, setBusy] = useState(false);
+  const [detecting, setDetecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function refresh() {
@@ -128,6 +129,46 @@ export default function Templates() {
     setZones(MAROC_VIRAL_PRESET());
     setActiveZoneId(null);
     setCanvasBackground("#020B16");
+  }
+
+  function zoneDefToEditable(z: ZoneDef): EditableZone {
+    if (z.type === "photo") {
+      return { ...newZone(z.label, "photo", []), id: z.id, label: z.label, rect: { x: z.x, y: z.y, width: z.width, height: z.height } };
+    }
+    return {
+      ...newZone(z.label, "text", []),
+      id: z.id,
+      label: z.label,
+      rect: { x: z.x, y: z.y, width: z.width, height: z.height },
+      align: z.align ?? "left",
+      weight: z.weight ?? "regular",
+      color: z.color ?? "#ffffff",
+      highlightColor: z.highlightColor ?? "#39FF14",
+      locked: Boolean(z.locked),
+      defaultValue: z.defaultValue ?? "",
+      prefix: z.prefix ?? "",
+      pill: Boolean(z.pill),
+    };
+  }
+
+  async function handleAutoDetect() {
+    if (!file) return;
+    setDetecting(true);
+    setError(null);
+    try {
+      const res = await api.templates.detectZones(file);
+      setZones(res.zones.map(zoneDefToEditable));
+      setCanvasBackground((bg) => bg || "#020B16");
+      setActiveZoneId(null);
+    } catch (e: any) {
+      setError(
+        e.message?.includes("missing_api_key")
+          ? "Add your Anthropic API key in Settings to use AI zone detection."
+          : e.message ?? "Zone detection failed"
+      );
+    } finally {
+      setDetecting(false);
+    }
   }
 
   async function handleSave() {
@@ -217,6 +258,13 @@ export default function Templates() {
               naturalSize && (
                 <>
                   <div className="flex flex-wrap gap-2 mb-2">
+                    <button
+                      onClick={handleAutoDetect}
+                      disabled={detecting}
+                      className="text-xs px-3 py-1.5 rounded-md bg-maroc-red hover:bg-red-700 disabled:opacity-50 font-medium"
+                    >
+                      {detecting ? "Analyzing with AI…" : "✨ Auto-detect zones with AI"}
+                    </button>
                     <button onClick={() => addZone("photo")} className="text-xs px-3 py-1.5 rounded-md bg-neutral-800 hover:bg-neutral-700">
                       + Photo zone
                     </button>
@@ -230,6 +278,10 @@ export default function Templates() {
                       Change image
                     </button>
                   </div>
+                  <p className="text-xs text-neutral-500 mb-2">
+                    Auto-detect uses Claude's vision to propose a starting layout from your image —
+                    review and adjust the zones below (drag to redraw any of them) before saving.
+                  </p>
                   <ZoneEditor
                     imageUrl={previewUrl}
                     naturalWidth={naturalSize.w}

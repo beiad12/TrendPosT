@@ -3,10 +3,40 @@ import { randomUUID } from "node:crypto";
 import sharp from "sharp";
 import { z } from "zod";
 import { db } from "../db/index.js";
-import { uploadTemplateImage } from "../middleware/upload.js";
+import { uploadTemplateImage, uploadMemory } from "../middleware/upload.js";
+import { detectTemplateZones, detectedZonesToDefs } from "../services/ai/zoneDetection.js";
+import { ProviderKeyMissingError } from "../services/ai/types.js";
 import type { Template } from "../types.js";
 
 export const templatesRouter = Router();
+
+/**
+ * POST /api/templates/detect-zones
+ * multipart/form-data: file=<template image>
+ * Uses Claude's vision to propose a starting set of zones (photo + text
+ * placeholders) for an uploaded template image — a smart first draft the
+ * user reviews/adjusts in the editor rather than dragging every rectangle
+ * by hand. Requires an Anthropic API key configured in Settings.
+ */
+templatesRouter.post("/detect-zones", uploadMemory.single("file"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "file is required" });
+
+  try {
+    const detected = await detectTemplateZones(req.file.buffer);
+    if (detected.length === 0) {
+      return res.status(422).json({
+        error: "no_zones_detected",
+        message: "Couldn't identify any placeholder areas in this image — try adding zones manually.",
+      });
+    }
+    res.json({ zones: detectedZonesToDefs(detected) });
+  } catch (err) {
+    if (err instanceof ProviderKeyMissingError) {
+      return res.status(400).json({ error: "missing_api_key", provider: "anthropic" });
+    }
+    res.status(500).json({ error: "Zone detection failed", detail: (err as Error)?.message });
+  }
+});
 
 function rowToTemplate(row: any): Template {
   return {

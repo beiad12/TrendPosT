@@ -51,3 +51,10 @@ export const uploadAnyPhotos = multer({
   fileFilter: imageFileFilter,
   limits: { fileSize: 15 * 1024 * 1024, files: 10 },
 }).any();
+
+/** In-memory only (never written to disk) — for analysis-only uploads like AI zone detection. */
+export const uploadMemory = multer({
+  storage: multer.memoryStorage(),
+  fileFilter: imageFileFilter,
+  limits: { fileSize: 15 * 1024 * 1024 },
+});

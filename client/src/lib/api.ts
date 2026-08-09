@@ -158,6 +158,11 @@ export const api = {
     list: () => request<{ templates: Template[] }>("/templates"),
     create: (form: FormData) =>
       request<{ template: Template }>("/templates", { method: "POST", body: form }),
+    detectZones: (file: File) => {
+      const form = new FormData();
+      form.set("file", file);
+      return request<{ zones: ZoneDef[] }>("/templates/detect-zones", { method: "POST", body: form });
+    },
   },
   render: {
     render: async (form: FormData): Promise<Blob> => {
