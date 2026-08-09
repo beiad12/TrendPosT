@@ -107,6 +107,14 @@ export interface TemplateStyle {
   canvasBackground?: string;
 }
 
+export type BrandingPosition = "bottom-right" | "bottom-left" | "top-right" | "top-left";
+
+export interface Branding {
+  logoUrl: string | null;
+  position: BrandingPosition;
+  updatedAt: string | null;
+}
+
 export interface Template {
   id: string;
   name: string;
@@ -198,6 +206,22 @@ export const api = {
       }
       return res.blob();
     },
+  },
+  branding: {
+    get: () => request<Branding>("/branding/logo"),
+    upload: (file: File, position: BrandingPosition) => {
+      const form = new FormData();
+      form.set("file", file);
+      form.set("position", position);
+      return request<Branding>("/branding/logo", { method: "POST", body: form });
+    },
+    setPosition: (position: BrandingPosition) =>
+      request<Branding>("/branding/logo", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ position }),
+      }),
+    remove: () => request<Branding>("/branding/logo", { method: "DELETE" }),
   },
   autoPost: {
     generate: (body: {

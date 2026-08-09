@@ -24,12 +24,13 @@ together).
 | **Template editor UI** | ✅ Upload any PNG/JPG as the background, add as many text or photo zones as your design needs, drag each into place, configure per-zone alignment/weight/color/highlight-color/locked/default-value/pill-background. Not hardcoded to any fixed shape — a "Quick add" preset just pre-fills the common Photo/Category/Headline/Description/CTA set. |
 | **AI zone detection** | ✅ "✨ Auto-detect zones with AI" — Claude's vision looks at your uploaded artwork and proposes a starting set of zones (photo + text placeholders, with type/alignment inferred) instead of dragging every rectangle by hand; you review/adjust before saving. Requires an Anthropic key in Settings. |
 | **"Maroc Viral" brand template** | ✅ The brand's actual design system (colors, gradients, Cairo/Montserrat fonts, layout) implemented as a real, working 5-zone template (Photo, Category, Headline, Description, CTA) — auto-seeded on first boot in Arabic + French. See "The Maroc Viral template" below. |
-| **Trend discovery (RSS)** | ✅ Hespress, Le360, H24Info, Akhbarona feeds parsed and normalized; tolerant of individual feed failures. |
-| **Virality scoring** | ✅ Momentum, emotional-category keyword detection, recency decay, cross-source saturation penalty → 0–100 score + human-readable explanation. |
+| **Trend discovery (multi-source)** | ✅ Combines Moroccan news RSS (Hespress, Le360, H24Info, Akhbarona), **Google Trends Morocco** (`trends.google.com/.../daily/rss?geo=MA`), and **Reddit r/Morocco** (public `hot.json` listing) into one unified, ranked dashboard feed — each source fetched independently (`Promise.allSettled`) so one dead feed never takes the others down. See "Trend sources" below. |
+| **Virality scoring** | ✅ Momentum, emotional-category keyword detection, recency decay, cross-source corroboration bonus + saturation penalty (computed across *all* sources together, not per-source) → 0–100 score + human-readable explanation. |
 | **Multi-AI caption generator** | ✅ Unified router for Claude / GPT / Mistral / Gemini / Grok behind one interface; "Compare All" mode; 5 tone variants × 3 language options + hashtags + suggested post time. |
 | **Encrypted API-key vault** | ✅ AES-256-GCM at rest, per-provider, Settings UI, keys never logged or echoed back. |
+| **Page logo watermark** | ✅ Upload your page's logo once in Settings; it's stamped automatically onto every rendered post (AI Auto Post *and* manual templates) at a configurable corner — no per-post setup. See "Page logo" below. |
 | **Dashboard UI** | ✅ Ranked trend list → caption generation modal → template + headline + photo → live render preview → download. |
-| Google Trends / X / YouTube / Reddit sources | 🚧 Not wired — `RSS_SOURCES` in `server/src/services/trends/sources.ts` is the extension point; each would become its own source module feeding the same `NormalizedTrend` shape. |
+| X/Twitter trending source | 🚧 Not wired — X's trending-topics data requires a paid API tier (no free/no-key public endpoint exists the way Google Trends and Reddit have one). The extension point is documented in `server/src/services/trends/aggregator.ts`; it's intentionally not stubbed with fake data. |
 | Facebook Graph API (Page Insights, OAuth, direct publish) | 🚧 Not implemented — publishing today is "download + copy caption"; see `docs/SPEC.md` §5 for the target flow. |
 | Scheduling / content calendar | 🚧 Schema has a `status`/`scheduled_for` column on `generated_posts` (see `docs/schema.sql`) but no queue worker yet. |
 | Production Postgres | 🚧 Dev server uses bundled SQLite (zero setup). `docs/schema.sql` is the Postgres-equivalent schema for swapping in production — see below. |
@@ -41,7 +42,8 @@ together).
 ```
 client/   React + Vite + Tailwind — dashboard, template editor, settings
 server/   Node + Express + TypeScript
-  src/services/trends/    RSS ingestion + normalization + virality scoring
+  src/services/trends/    Multi-source ingestion (RSS + Google Trends + Reddit) + normalization + virality scoring
+  src/services/brandingStore.ts  Global page-logo settings (singleton row), used by the render pipeline
   src/services/ai/        Provider adapters (anthropic/openai/mistral/google/xai)
                            behind one router: {trend, tone, language, provider} -> captions
   src/services/render/    Sharp-based compositing engine + SVG text/gradient layer
@@ -241,13 +243,40 @@ pre-loaded with it for testing that swap.
 
 ---
 
-## Notes on RSS sources
+## Trend sources
 
-`server/src/services/trends/sources.ts` lists best-effort public feed URLs
-for major Moroccan outlets. Outlets occasionally restructure their sites, so
-verify feed URLs periodically — `fetchAllTrends()` is resilient to any
-individual feed being down (`Promise.allSettled`) and simply returns fewer
-results rather than failing the whole request.
+`server/src/services/trends/aggregator.ts` combines three independent,
+free/no-API-key sources into one ranked feed (`fetchAllTrends()`):
+
+| Source | Module | Notes |
+|---|---|---|
+| Moroccan news RSS | `rssService.ts` (feed list in `sources.ts`) | Hespress, Le360, H24Info, Akhbarona. Outlets occasionally restructure their sites — verify feed URLs periodically. |
+| Google Trends (Morocco) | `sources/googleTrends.ts` | `trends.google.com/trends/trendingsearches/daily/rss?geo=MA` — Google's own daily trending list, no key required. |
+| Reddit r/Morocco | `sources/reddit.ts` | Public `hot.json` listing (read-only, no OAuth needed for a subreddit's public posts). |
+
+Each source is fetched independently (`Promise.allSettled`) so one being down
+just means fewer results, not a failed request. Cross-source duplicate
+titles feed into the same corroboration/saturation scoring as before — a
+story trending on Google *and* covered by two outlets *and* posted to Reddit
+scores its corroboration bonus once, across all three, not per-source.
+
+Adding a new source: write a module returning
+`Omit<NormalizedTrend, "score" | "scoreExplanation">[]` (see the two
+examples above) and add it to the `Promise.allSettled` list in
+`aggregator.ts`. X/Twitter's trending-topics data needs a paid API tier —
+there's no free public endpoint for it — so it's documented as the next
+extension point there rather than faked.
+
+## Page logo
+
+Settings → "Page Logo" lets you upload your page's logo once (PNG/JPG/WEBP,
+stored under `data/storage/branding/`) and pick a corner
+(bottom-right/bottom-left/top-right/top-left). From then on, every rendered
+post — both the one-click AI Auto Post flow and manual template renders —
+composites that logo on top of everything else automatically
+(`renderPost()`'s `watermark` option in `renderEngine.ts`), scaled relative
+to the output image size. No per-post setup, and it's optional: skip
+uploading one and renders are unaffected.
 
 ## Security
 

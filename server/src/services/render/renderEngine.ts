@@ -18,6 +18,8 @@ export interface RenderOptions {
   outputWidth?: number;
   outputHeight?: number;
   format?: "png" | "jpeg";
+  /** Page logo, stamped on top of every zone, in every render, regardless of template. */
+  watermark?: { logoPath: string; position: "bottom-right" | "bottom-left" | "top-right" | "top-left" };
 }
 
 function parseColor(hex: string): { r: number; g: number; b: number; alpha: number } {
@@ -135,6 +137,24 @@ export async function renderPost(opts: RenderOptions): Promise<Buffer> {
   const format = opts.format ?? "jpeg";
 
   let pipeline = sharp(composed).resize(outW, outH, { fit: "cover" });
+
+  if (opts.watermark?.logoPath) {
+    const { logoPath, position } = opts.watermark;
+    try {
+      const logoWidth = Math.round(outW * 0.16);
+      const logoBuffer = await sharp(logoPath).resize(logoWidth, logoWidth, { fit: "inside" }).toBuffer();
+      const logoMeta = await sharp(logoBuffer).metadata();
+      const lw = logoMeta.width ?? logoWidth;
+      const lh = logoMeta.height ?? logoWidth;
+      const margin = Math.round(outW * 0.035);
+      const left = position.endsWith("right") ? outW - lw - margin : margin;
+      const top = position.startsWith("bottom") ? outH - lh - margin : margin;
+      pipeline = pipeline.composite([{ input: logoBuffer, left, top }]);
+    } catch {
+      // A missing/corrupt logo file shouldn't break the whole render -- just skip the watermark.
+    }
+  }
+
   pipeline = format === "png" ? pipeline.png() : pipeline.flatten({ background: "#ffffff" }).jpeg({ quality: 92 });
 
   return pipeline.toBuffer();

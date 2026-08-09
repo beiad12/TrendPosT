@@ -49,3 +49,12 @@ CREATE TABLE IF NOT EXISTS api_keys (
   auth_tag TEXT NOT NULL,
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Singleton row (id always 1): the page's logo, stamped onto every rendered
+-- post regardless of which template is used.
+CREATE TABLE IF NOT EXISTS branding (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  logo_path TEXT,
+  position TEXT NOT NULL DEFAULT 'bottom-right', -- bottom-right | bottom-left | top-right | top-left
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);

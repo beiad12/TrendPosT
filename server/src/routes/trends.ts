@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { fetchAllTrends } from "../services/trends/rssService.js";
+import { fetchAllTrends } from "../services/trends/aggregator.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 
 export const trendsRouter = Router();

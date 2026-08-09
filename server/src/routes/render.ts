@@ -7,6 +7,7 @@ import { uploadAnyPhotos, EXPORTS_DIR } from "../middleware/upload.js";
 import { renderPost } from "../services/render/renderEngine.js";
 import { isPhotoZone } from "../types.js";
 import { getTemplateById } from "../services/templateStore.js";
+import { getWatermarkOption } from "../services/brandingStore.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 
 export const renderRouter = Router();
@@ -83,6 +84,7 @@ renderRouter.post("/", uploadAnyPhotos, asyncHandler(async (req, res) => {
       outputWidth,
       outputHeight,
       format,
+      watermark: getWatermarkOption(),
     });
 
     const ext = format === "png" ? "png" : "jpg";

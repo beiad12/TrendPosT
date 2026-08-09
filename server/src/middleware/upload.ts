@@ -7,8 +7,9 @@ const STORAGE_ROOT = process.env.STORAGE_ROOT || path.join(process.cwd(), "data"
 export const TEMPLATES_DIR = path.join(STORAGE_ROOT, "templates");
 export const EXPORTS_DIR = path.join(STORAGE_ROOT, "exports");
 export const UPLOADS_DIR = path.join(STORAGE_ROOT, "uploads");
+export const BRANDING_DIR = path.join(STORAGE_ROOT, "branding");
 
-for (const dir of [TEMPLATES_DIR, EXPORTS_DIR, UPLOADS_DIR]) {
+for (const dir of [TEMPLATES_DIR, EXPORTS_DIR, UPLOADS_DIR, BRANDING_DIR]) {
   fs.mkdirSync(dir, { recursive: true });
 }
 
@@ -50,6 +51,12 @@ export const uploadAnyPhotos = multer({
   fileFilter: imageFileFilter,
   limits: { fileSize: 15 * 1024 * 1024, files: 10 },
 }).any();
+
+export const uploadLogo = multer({
+  storage: makeStorage(BRANDING_DIR),
+  fileFilter: imageFileFilter,
+  limits: { fileSize: 8 * 1024 * 1024 },
+});
 
 /** In-memory only (never written to disk) — for analysis-only uploads like AI zone detection. */
 export const uploadMemory = multer({

@@ -2,6 +2,7 @@ import { generateCaptions } from "./router.js";
 import { renderPost } from "../render/renderEngine.js";
 import { getTemplateById, getTemplateByName } from "../templateStore.js";
 import { PRESS_POSTER_TEMPLATE_NAME } from "../seedTemplates.js";
+import { getWatermarkOption } from "../brandingStore.js";
 import type { CaptionRequest } from "./types.js";
 
 /** A client-input problem (missing photo, unknown template) — the route maps this to 400, not 502. */
@@ -76,6 +77,7 @@ export async function generateAutoPost(req: AutoPostRequest): Promise<AutoPostRe
     outputWidth: template.canvasWidth,
     outputHeight: template.canvasHeight,
     format: "jpeg",
+    watermark: getWatermarkOption(),
   });
 
   return {

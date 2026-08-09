@@ -1,25 +1,14 @@
 import Parser from "rss-parser";
 import { randomUUID } from "node:crypto";
 import { RSS_SOURCES } from "./sources.js";
-import { scoreTrend } from "./scoring.js";
+import type { NormalizedTrend } from "./types.js";
+
+export type { NormalizedTrend };
 
 const parser = new Parser({
   timeout: 8000,
   headers: { "User-Agent": "TrendPostBot/1.0 (+https://github.com/beiad12/trendpost)" },
 });
-
-export interface NormalizedTrend {
-  id: string;
-  source: string;
-  title: string;
-  url: string;
-  imageUrl: string | null;
-  publishedAt: string | null;
-  language: string;
-  category: string;
-  score: number;
-  scoreExplanation: string;
-}
 
 function extractImage(item: any): string | null {
   if (item.enclosure?.url) return item.enclosure.url;
@@ -33,8 +22,15 @@ function extractImage(item: any): string | null {
   return null;
 }
 
-/** Fetches and normalizes all configured RSS sources, tolerating individual feed failures. */
-export async function fetchAllTrends(): Promise<NormalizedTrend[]> {
+/**
+ * Fetches and normalizes the configured Moroccan news RSS feeds, tolerating
+ * individual feed failures. Scoring (including cross-source duplicate
+ * detection) happens once at the aggregator level in trends/aggregator.ts,
+ * since the same story often breaks on RSS *and* Reddit *and* Google
+ * Trends at once — this only returns raw, unscored items tagged with their
+ * source.
+ */
+export async function fetchRssTrends(): Promise<Omit<NormalizedTrend, "score" | "scoreExplanation">[]> {
   const results = await Promise.allSettled(
     RSS_SOURCES.map(async (source) => {
       const feed = await parser.parseURL(source.url);
@@ -46,24 +42,8 @@ export async function fetchAllTrends(): Promise<NormalizedTrend[]> {
     .filter((r): r is PromiseFulfilledResult<any[]> => r.status === "fulfilled")
     .flatMap((r) => r.value);
 
-  // crude duplicate-story detection across sources: same normalized title prefix
-  const titleCounts = new Map<string, number>();
-  for (const { item } of flat) {
-    const key = String(item.title ?? "").toLowerCase().slice(0, 40);
-    titleCounts.set(key, (titleCounts.get(key) ?? 0) + 1);
-  }
-
-  const trends: NormalizedTrend[] = flat.map(({ source, item }) => {
+  return flat.map(({ source, item }) => {
     const publishedAt = item.isoDate ? new Date(item.isoDate) : item.pubDate ? new Date(item.pubDate) : null;
-    const key = String(item.title ?? "").toLowerCase().slice(0, 40);
-    const duplicateCount = (titleCounts.get(key) ?? 1) - 1;
-
-    const { score, explanation } = scoreTrend({
-      title: item.title ?? "",
-      publishedAt,
-      duplicateCount,
-    });
-
     return {
       id: randomUUID(),
       source: source.name,
@@ -73,11 +53,6 @@ export async function fetchAllTrends(): Promise<NormalizedTrend[]> {
       publishedAt: publishedAt ? publishedAt.toISOString() : null,
       language: source.language,
       category: item.categories?.[0] ?? "general",
-      score,
-      scoreExplanation: explanation,
     };
   });
-
-  trends.sort((a, b) => b.score - a.score);
-  return trends;
 }
