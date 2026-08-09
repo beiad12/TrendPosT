@@ -19,11 +19,8 @@ const ADAPTERS: Record<Provider, AiAdapter> = {
 
 function getApiKey(provider: Provider): string | null {
   const row = db
-    .prepare<
-      [string],
-      { ciphertext: string; iv: string; auth_tag: string }
-    >("SELECT ciphertext, iv, auth_tag FROM api_keys WHERE provider = ?")
-    .get(provider);
+    .prepare("SELECT ciphertext, iv, auth_tag FROM api_keys WHERE provider = ?")
+    .get(provider) as { ciphertext: string; iv: string; auth_tag: string } | undefined;
   if (!row) return null;
   return decryptSecret({
     ciphertext: row.ciphertext,
@@ -44,8 +41,6 @@ export async function generateCaptions(
 }
 
 export function configuredProviders(): Provider[] {
-  const rows = db
-    .prepare<[], { provider: Provider }>("SELECT provider FROM api_keys")
-    .all();
+  const rows = db.prepare("SELECT provider FROM api_keys").all() as { provider: Provider }[];
   return rows.map((r) => r.provider);
 }

@@ -44,7 +44,7 @@ server/   Node + Express + TypeScript
   src/services/render/    Sharp-based compositing engine + SVG text/gradient layer
   src/services/crypto.ts  AES-256-GCM API-key encryption
   src/routes/             /api/trends, /api/ai, /api/settings, /api/templates, /api/render
-  src/db/                 SQLite (dev) — schema mirrors docs/schema.sql (Postgres, prod)
+  src/db/                 node:sqlite (dev, no native deps) — schema mirrors docs/schema.sql (Postgres, prod)
 docs/
   SPEC.md      the original product spec
   schema.sql   production Postgres schema
@@ -74,7 +74,9 @@ the UI can show an "add your API key" prompt for anything unconfigured.
 
 ## Getting started
 
-Requires Node 20+.
+Requires Node 22.5+ (the server uses Node's built-in `node:sqlite` for local
+dev — no native/compiled dependency, so `npm install` works out of the box
+on Windows/macOS/Linux with no build tools required).
 
 ### Windows — one-click install & launch
 
@@ -123,12 +125,13 @@ cd server && npm test        # renderEngine end-to-end compositing test (vitest)
 ### Production DB (Postgres)
 
 The dev server runs on a bundled SQLite file (`server/data/trendpost.db`,
-auto-created) so the whole project runs with zero external services. For
-production, `docs/schema.sql` is the equivalent Postgres schema (same
-tables/columns); point the server's DB layer (`server/src/db/`) at
-`DATABASE_URL` and swap `better-sqlite3` calls for a `pg` pool using that
-schema. `docker-compose.yml` spins up a local Postgres pre-loaded with it
-for testing that swap.
+auto-created) via Node's built-in `node:sqlite` module — no native/compiled
+dependency, so the whole project runs with zero external services and no
+platform build tools. For production, `docs/schema.sql` is the equivalent
+Postgres schema (same tables/columns); point the server's DB layer
+(`server/src/db/`) at `DATABASE_URL` and swap the `node:sqlite` calls for a
+`pg` pool using that schema. `docker-compose.yml` spins up a local Postgres
+pre-loaded with it for testing that swap.
 
 ---
 

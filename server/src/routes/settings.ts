@@ -12,10 +12,8 @@ export const settingsRouter = Router();
  */
 settingsRouter.get("/keys", (_req, res) => {
   const rows = db
-    .prepare<[], { provider: string; updated_at: string }>(
-      "SELECT provider, updated_at FROM api_keys"
-    )
-    .all();
+    .prepare("SELECT provider, updated_at FROM api_keys")
+    .all() as { provider: string; updated_at: string }[];
   const configured = new Map(rows.map((r) => [r.provider, r.updated_at]));
 
   const status = PROVIDERS.map((p) => ({
