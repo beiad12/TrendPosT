@@ -28,6 +28,41 @@ const DRAMATIC_STORY_SOURCES: { subreddit: string; label: string }[] = [
 const CACHE_TTL_MS = 10 * 60 * 1000;
 let cache: { at: number; stories: NormalizedTrend[] } | null = null;
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Fetches every subreddit's listing. When using Reddit's OAuth API (a real
+ * app configured) all requests fire at once — that quota is generous and
+ * per-app. When falling back to the public unauthenticated endpoint (see
+ * redditClient.ts#fetchSubredditListingPublic), firing all 12 requests
+ * simultaneously from the same IP is exactly the burst pattern Reddit's
+ * rate limiter is quickest to block — so those go out in small staggered
+ * batches instead, trading a couple of extra seconds of latency for a much
+ * better chance of actually getting data back.
+ */
+async function fetchAllSources(
+  sources: typeof DRAMATIC_STORY_SOURCES,
+  staggered: boolean
+): Promise<PromiseSettledResult<{ source: (typeof sources)[number]; posts: RedditPost[] }>[]> {
+  const fetchOne = (source: (typeof sources)[number]) =>
+    fetchSubredditListingAuto(source.subreddit, "hot", 15).then((posts) => ({ source, posts }));
+
+  if (!staggered) {
+    return Promise.allSettled(sources.map(fetchOne));
+  }
+
+  const batchSize = 4;
+  const results: PromiseSettledResult<{ source: (typeof sources)[number]; posts: RedditPost[] }>[] = [];
+  for (let i = 0; i < sources.length; i += batchSize) {
+    const batch = sources.slice(i, i + batchSize);
+    results.push(...(await Promise.allSettled(batch.map(fetchOne))));
+    if (i + batchSize < sources.length) await sleep(600);
+  }
+  return results;
+}
+
 function ageMinutesOf(publishedAt: string | null): number {
   if (!publishedAt) return 0;
   return Math.max(0, Math.round((Date.now() - new Date(publishedAt).getTime()) / 60_000));
@@ -115,9 +150,7 @@ export async function getDramaticStories(forceRefresh = false): Promise<Dramatic
     return { stories: cache.stories, generatedAt: new Date(cache.at).toISOString(), configured: true, usingFallback };
   }
 
-  const results = await Promise.allSettled(
-    DRAMATIC_STORY_SOURCES.map((source) => fetchSubredditListingAuto(source.subreddit, "hot", 15).then((posts) => ({ source, posts })))
-  );
+  const results = await fetchAllSources(DRAMATIC_STORY_SOURCES, usingFallback);
 
   const stories: NormalizedTrend[] = [];
   const seen = new Set<string>();

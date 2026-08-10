@@ -64,6 +64,26 @@ export async function fetchSubredditListing(subreddit: string, listing = "hot", 
   return body.data?.children?.map((c) => c.data) ?? [];
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchSubredditListingPublicOnce(subreddit: string, listing: string, limit: number): Promise<RedditPost[]> {
+  const resp = await fetch(`https://www.reddit.com/r/${subreddit}/${listing}.json?limit=${limit}&raw_json=1`, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+      Accept: "application/json",
+    },
+  });
+  if (!resp.ok) {
+    const err = new Error(`r/${subreddit} public fetch failed (${resp.status})`);
+    (err as any).status = resp.status;
+    throw err;
+  }
+  const body = (await resp.json()) as { data?: { children?: { data: RedditPost }[] } };
+  return body.data?.children?.map((c) => c.data) ?? [];
+}
+
 /**
  * Fetches one subreddit listing via Reddit's plain, unauthenticated
  * `www.reddit.com/r/x/hot.json` endpoint — no app registration, no
@@ -71,19 +91,27 @@ export async function fetchSubredditListing(subreddit: string, listing = "hot", 
  * serves to a logged-out browser tab; a real desktop-browser User-Agent
  * (not a bot-labeled one) gets through in most deployments. It's
  * unofficial and best-effort — Reddit can rate-limit or block it without
- * notice — so callers should treat a failure here as "try again later",
- * not a hard configuration error the way a missing OAuth app is.
+ * notice — so a 429/403 gets two retries with backoff (this endpoint has
+ * no OAuth quota to fall back on, so a transient block is worth a second
+ * try) before the caller sees it as a real failure.
  */
 export async function fetchSubredditListingPublic(subreddit: string, listing = "hot", limit = 25): Promise<RedditPost[]> {
-  const resp = await fetch(`https://www.reddit.com/r/${subreddit}/${listing}.json?limit=${limit}&raw_json=1`, {
-    headers: {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-      Accept: "application/json",
-    },
-  });
-  if (!resp.ok) throw new Error(`r/${subreddit} public fetch failed (${resp.status})`);
-  const body = (await resp.json()) as { data?: { children?: { data: RedditPost }[] } };
-  return body.data?.children?.map((c) => c.data) ?? [];
+  const delays = [400, 1200]; // two retries: ~0.4s, then ~1.2s
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= delays.length; attempt++) {
+    try {
+      return await fetchSubredditListingPublicOnce(subreddit, listing, limit);
+    } catch (err) {
+      lastErr = err;
+      const status = (err as any)?.status;
+      // Only rate-limit/transient-server codes are worth retrying; a hard block (403) or
+      // not-found (404) won't succeed on a second try, so fail fast on those instead.
+      const retryable = status === 429 || status === 503 || status === undefined;
+      if (!retryable || attempt === delays.length) break;
+      await sleep(delays[attempt]);
+    }
+  }
+  throw lastErr;
 }
 
 /**
