@@ -15,14 +15,25 @@ const LANGUAGES: { value: Language; label: string }[] = [
   { value: "darija", label: "Darija" },
   { value: "french", label: "French" },
   { value: "msa", label: "MSA Arabic" },
+  { value: "english", label: "English" },
 ];
 
 const PROVIDERS: Provider[] = ["anthropic", "openai", "mistral", "google", "xai"];
 
 type Step = "auto" | "caption" | "render";
 
-export default function TrendDetailModal({ trend, onClose }: { trend: Trend; onClose: () => void }) {
-  const [language, setLanguage] = useState<Language>("french");
+export default function TrendDetailModal({
+  trend,
+  onClose,
+  defaultLanguage = "french",
+  defaultStyle = "standard",
+}: {
+  trend: Trend;
+  onClose: () => void;
+  defaultLanguage?: Language;
+  defaultStyle?: "standard" | "dramatic";
+}) {
+  const [language, setLanguage] = useState<Language>(defaultLanguage);
   const [provider, setProvider] = useState<Provider | "all">("all");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -114,7 +125,7 @@ export default function TrendDetailModal({ trend, onClose }: { trend: Trend; onC
           </button>
         </div>
 
-        {step === "auto" && <AutoPostPanel trend={trend} />}
+        {step === "auto" && <AutoPostPanel trend={trend} defaultLanguage={defaultLanguage} defaultStyle={defaultStyle} />}
 
         {step === "caption" && (
           <div className="space-y-4">

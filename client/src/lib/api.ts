@@ -88,7 +88,7 @@ export interface ProviderStatus {
   updatedAt: string | null;
 }
 
-export type Language = "darija" | "french" | "msa";
+export type Language = "darija" | "french" | "msa" | "english";
 export type Tone = "funny" | "informative" | "question-hook" | "emotional" | "controversial-safe";
 
 export interface CaptionVariant {
@@ -242,6 +242,10 @@ export const api = {
       request<TrendsResponse>(`/trends/refresh${country ? `?country=${country}` : ""}`, { method: "POST" }),
     countries: () => request<{ countries: CountryOption[] }>("/trends/countries"),
     categories: () => request<{ categories: CategoryOption[] }>("/trends/categories"),
+    dramaticStories: (refresh?: boolean) =>
+      request<{ stories: Trend[]; generatedAt: string; configured: boolean; reason?: string }>(
+        `/trends/dramatic-stories${refresh ? "?refresh=1" : ""}`
+      ),
   },
   settings: {
     listKeys: () => request<{ providers: ProviderStatus[] }>("/settings/keys"),

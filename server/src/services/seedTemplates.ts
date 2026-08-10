@@ -113,7 +113,7 @@ export async function seedPressPosterTemplate(): Promise<void> {
  * treatment than the plain photo+headline default.
  */
 export async function seedDramaticStoryTemplates(): Promise<void> {
-  for (const language of ["ar", "fr"] as const) {
+  for (const language of ["ar", "fr", "en"] as const) {
     const name = DRAMATIC_TEMPLATE_NAME[language];
     const existing = db.prepare("SELECT id FROM templates WHERE name = ?").get(name);
     if (existing) continue;

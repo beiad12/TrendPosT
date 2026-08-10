@@ -23,7 +23,7 @@ const bodySchema = z.object({
     publishedAt: z.string().optional(),
   }),
   provider: z.enum(PROVIDERS),
-  language: z.enum(["darija", "french", "msa"]),
+  language: z.enum(["darija", "french", "msa", "english"]),
   templateId: z.string().uuid().optional(),
 });
 

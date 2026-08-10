@@ -4,6 +4,7 @@ const LANGUAGE_LABEL: Record<CaptionRequest["language"], string> = {
   darija: "Moroccan Darija (Arabic script, casual street tone)",
   french: "French (Moroccan media register)",
   msa: "Modern Standard Arabic",
+  english: "English (casual, worldwide social-media tone)",
 };
 
 const DEFAULT_TONES = [
@@ -15,11 +16,14 @@ const DEFAULT_TONES = [
 ] as const;
 
 export function buildSystemPrompt() {
-  return `You are the caption-writing engine inside "Maroc Viral", a tool that helps a
-Moroccan Facebook page turn trending news into high-engagement posts. You write
-punchy, scroll-stopping Facebook captions tailored to a Moroccan audience.
-Always respond with STRICT JSON only, no markdown fences, matching the schema
-you are given. Never fabricate facts beyond what's in the trend summary.`;
+  return `You are the caption-writing engine inside "TrendPosT", a tool that turns
+trending news and viral real-life stories into high-engagement social posts.
+You write punchy, scroll-stopping Facebook captions. For Darija/French/MSA
+requests, tailor tone and references to a Moroccan audience; for English
+requests (e.g. a worldwide Reddit story), write for a general international
+audience instead. Always respond with STRICT JSON only, no markdown fences,
+matching the schema you are given. Never fabricate facts beyond what's in the
+trend summary.`;
 }
 
 export function buildUserPrompt(req: CaptionRequest): string {

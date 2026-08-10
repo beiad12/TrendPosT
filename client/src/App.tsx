@@ -1,5 +1,6 @@
 import { NavLink, Route, Routes } from "react-router-dom";
 import Dashboard from "./pages/Dashboard.js";
+import DramaticStories from "./pages/DramaticStories.js";
 import Templates from "./pages/Templates.js";
 import Settings from "./pages/Settings.js";
 import InstallButton from "./components/InstallButton.js";
@@ -23,6 +24,9 @@ export default function App() {
             <NavLink to="/" end className={navLinkClass}>
               Dashboard
             </NavLink>
+            <NavLink to="/dramatic-stories" className={navLinkClass}>
+              🎬 Dramatic Stories
+            </NavLink>
             <NavLink to="/templates" className={navLinkClass}>
               Templates
             </NavLink>
@@ -37,6 +41,7 @@ export default function App() {
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-6">
         <Routes>
           <Route path="/" element={<Dashboard />} />
+          <Route path="/dramatic-stories" element={<DramaticStories />} />
           <Route path="/templates" element={<Templates />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>

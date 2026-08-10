@@ -9,7 +9,7 @@ export const aiRouter = Router();
 
 const generateSchema = z.object({
   provider: z.enum(PROVIDERS).optional(), // omitted => "Compare All"
-  language: z.enum(["darija", "french", "msa"]),
+  language: z.enum(["darija", "french", "msa", "english"]),
   tones: z
     .array(
       z.enum(["funny", "informative", "question-hook", "emotional", "controversial-safe"])

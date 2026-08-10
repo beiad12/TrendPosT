@@ -5,6 +5,7 @@ const LANGUAGES: { value: Language; label: string }[] = [
   { value: "darija", label: "Darija" },
   { value: "french", label: "French" },
   { value: "msa", label: "MSA Arabic" },
+  { value: "english", label: "English" },
 ];
 
 const PROVIDERS: Provider[] = ["anthropic", "openai", "mistral", "google", "xai"];
@@ -17,14 +18,17 @@ type Style = "standard" | "dramatic";
  * the fetched template list by name rather than a hardcoded id, since ids
  * are only assigned at seed time.
  */
-const DRAMATIC_TEMPLATE_NAME: Record<"ar" | "fr", string> = {
+const DRAMATIC_TEMPLATE_NAME: Record<"ar" | "fr" | "en", string> = {
   ar: "Dramatic Story — قصة مثيرة (عربي)",
   fr: "Dramatic Story — Histoire Choc (Français)",
+  en: "Dramatic Story — Shocking Story (English)",
 };
 
-/** Darija and MSA both write Arabic script; French is Latin — same split the render engine itself uses. */
-function scriptFor(language: Language): "ar" | "fr" {
-  return language === "french" ? "fr" : "ar";
+/** Darija and MSA both write Arabic script, French is Latin, English gets its own copy. */
+function scriptFor(language: Language): "ar" | "fr" | "en" {
+  if (language === "french") return "fr";
+  if (language === "english") return "en";
+  return "ar";
 }
 
 const PHOTO_SOURCE_LABEL: Record<PhotoSource, string> = {
@@ -49,10 +53,18 @@ function base64ToBlob(base64: string, mime: string): Blob {
  * (see autoPost.ts#resolvePhoto) — so generation is never blocked on a
  * missing photo, it just tells you afterward where the photo came from.
  */
-export default function AutoPostPanel({ trend }: { trend: Trend }) {
+export default function AutoPostPanel({
+  trend,
+  defaultLanguage = "french",
+  defaultStyle = "standard",
+}: {
+  trend: Trend;
+  defaultLanguage?: Language;
+  defaultStyle?: Style;
+}) {
   const [provider, setProvider] = useState<Provider>("anthropic");
-  const [language, setLanguage] = useState<Language>("french");
-  const [style, setStyle] = useState<Style>("standard");
+  const [language, setLanguage] = useState<Language>(defaultLanguage);
+  const [style, setStyle] = useState<Style>(defaultStyle);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

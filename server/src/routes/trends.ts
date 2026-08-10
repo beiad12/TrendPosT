@@ -3,6 +3,7 @@ import { getTrends, refreshTrends, getTrendsForCountry, refreshTrendsForCountry 
 import { toNormalizedTrend } from "../services/trends/trendMapper.js";
 import { COUNTRIES, getCountry } from "../services/trends/countries.js";
 import { CATEGORIES } from "../services/trends/config.js";
+import { getDramaticStories } from "../services/trends/dramaticStories.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import type { TrendEngineResult } from "../services/trends/engine.js";
 
@@ -31,6 +32,21 @@ trendsRouter.get("/categories", (_req, res) => {
     categories: CATEGORIES.map((c) => ({ key: c.key, label: c.label, labelEn: c.labelEn, emoji: c.emoji })),
   });
 });
+
+/**
+ * GET /api/trends/dramatic-stories
+ * A separate, worldwide feed — real first-person Reddit stories (TIFU,
+ * relationship drama, revenge, entitled-parent, etc.), not Morocco-scoped
+ * and not run through the news-clustering/relevance pipeline. Ranked by
+ * Reddit's own engagement. ?refresh=1 bypasses the 10-minute cache.
+ * Registered before the /:id catch-all below so this path isn't swallowed
+ * by it.
+ */
+trendsRouter.get("/dramatic-stories", asyncHandler(async (req, res) => {
+  const forceRefresh = req.query.refresh === "1";
+  const result = await getDramaticStories(forceRefresh);
+  res.json(result);
+}));
 
 function resolveCountryFetch(countryParam: string | undefined, forceRefresh: boolean): Promise<TrendEngineResult> {
   // No country, or explicitly Morocco -> the default Morocco-and-world home dashboard (unchanged).

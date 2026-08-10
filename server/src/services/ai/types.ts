@@ -1,6 +1,6 @@
 import type { Provider } from "./providers.js";
 
-export type Language = "darija" | "french" | "msa";
+export type Language = "darija" | "french" | "msa" | "english";
 
 export type Tone =
   | "funny"

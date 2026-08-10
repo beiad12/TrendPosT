@@ -9,24 +9,30 @@ import type { ZoneDef } from "../../types.js";
  * only these two framing labels are baked in, same pattern as the
  * "Maroc Viral" brand template's ar/fr variants.
  */
-const KICKER: Record<"ar" | "fr", string> = {
+export type DramaticLanguage = "ar" | "fr" | "en";
+
+const KICKER: Record<DramaticLanguage, string> = {
   ar: "قصة مثيرة",
   fr: "HISTOIRE CHOC",
+  en: "SHOCKING STORY",
 };
 
-const CTA: Record<"ar" | "fr", string> = {
+const CTA: Record<DramaticLanguage, string> = {
   ar: "هل صُدمت؟ شارك!",
   fr: "Choqué(e) ? Partage !",
+  en: "Shocked? Share it!",
 };
 
-const RIBBON: Record<"ar" | "fr", string> = {
+const RIBBON: Record<DramaticLanguage, string> = {
   ar: "حصري",
   fr: "EXCLUSIF",
+  en: "EXCLUSIVE",
 };
 
-export const DRAMATIC_TEMPLATE_NAME: Record<"ar" | "fr", string> = {
+export const DRAMATIC_TEMPLATE_NAME: Record<DramaticLanguage, string> = {
   ar: "Dramatic Story — قصة مثيرة (عربي)",
   fr: "Dramatic Story — Histoire Choc (Français)",
+  en: "Dramatic Story — Shocking Story (English)",
 };
 
 export interface DramaticGeometry {
@@ -44,7 +50,7 @@ export interface DramaticGeometry {
  * that dark band, and a small share-CTA pill beneath it. Expressed as the
  * same generic zone system every other template uses.
  */
-export function dramaticGeometry(canvas = 1080, language: "ar" | "fr" = "fr"): DramaticGeometry {
+export function dramaticGeometry(canvas = 1080, language: DramaticLanguage = "fr"): DramaticGeometry {
   const bannerHeight = 132;
   const pad = 56;
   const align = language === "ar" ? "right" : "left";
@@ -122,7 +128,7 @@ export function dramaticGeometry(canvas = 1080, language: "ar" | "fr" = "fr"): D
  * corner. Everything below the banner is left transparent — the photo
  * zone (see dramaticGeometry) covers that area completely at render time.
  */
-export async function buildDramaticBackground(canvas = 1080, language: "ar" | "fr" = "fr"): Promise<Buffer> {
+export async function buildDramaticBackground(canvas = 1080, language: DramaticLanguage = "fr"): Promise<Buffer> {
   const bannerHeight = 132;
   const stripeGap = 28;
   const stripeWidth = 14;
