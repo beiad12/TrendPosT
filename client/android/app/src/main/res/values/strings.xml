@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">TrendPosT</string>
+    <string name="title_activity_main">TrendPosT</string>
+    <string name="package_name">com.trendpost.app</string>
+    <string name="custom_url_scheme">com.trendpost.app</string>
+</resources>

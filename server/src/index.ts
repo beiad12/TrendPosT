@@ -15,7 +15,21 @@ import { seedMarocViralTemplates, seedPressPosterTemplate, seedDramaticStoryTemp
 const app = express();
 const PORT = Number(process.env.PORT) || 4000;
 
-app.use(cors({ origin: process.env.CLIENT_ORIGIN || "http://localhost:5173" }));
+/**
+ * Allowed origins for browser fetches. CLIENT_ORIGIN can be a
+ * comma-separated list to override this entirely (e.g. for a locked-down
+ * production deploy); left unset, it defaults to the Vite dev origin plus
+ * the two origins Capacitor's bundled WebView shell actually sends
+ * (`https://localhost` normally, `capacitor://localhost` on some Android
+ * WebView versions) — so the packaged Android/iOS app "just works" against
+ * any server without extra CORS configuration, matching how it already
+ * requires zero server-side setup for everything else.
+ */
+const allowedOrigins = process.env.CLIENT_ORIGIN
+  ? process.env.CLIENT_ORIGIN.split(",").map((o) => o.trim()).filter(Boolean)
+  : ["http://localhost:5173", "https://localhost", "capacitor://localhost"];
+
+app.use(cors({ origin: allowedOrigins }));
 app.use(express.json({ limit: "2mb" }));
 
 // Static access to stored template frames, uploads, and rendered exports.

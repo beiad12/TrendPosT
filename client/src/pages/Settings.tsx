@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { api, Branding, BrandingPosition, Provider, PROVIDER_LABELS, ProviderStatus } from "../lib/api.js";
+import { api, Branding, BrandingPosition, Provider, PROVIDER_LABELS, ProviderStatus, resolveUrl } from "../lib/api.js";
+import { ServerPanel } from "../components/HostGate.js";
 
 const PROVIDERS: Provider[] = ["anthropic", "openai", "mistral", "google", "xai"];
 
@@ -75,7 +76,7 @@ function BrandingPanel() {
       <div className="flex items-center gap-4 mb-4">
         <div className="w-20 h-20 rounded-md bg-neutral-950 border border-neutral-700 flex items-center justify-center overflow-hidden shrink-0">
           {branding?.logoUrl ? (
-            <img src={branding.logoUrl} alt="Page logo" className="w-full h-full object-contain" />
+            <img src={resolveUrl(branding.logoUrl)} alt="Page logo" className="w-full h-full object-contain" />
           ) : (
             <span className="text-xs text-neutral-500 text-center px-1">No logo yet</span>
           )}
@@ -166,6 +167,7 @@ export default function Settings() {
 
   return (
     <div className="max-w-2xl">
+      <ServerPanel />
       <BrandingPanel />
 
       <h1 className="text-2xl font-bold mb-1">AI Provider Settings</h1>

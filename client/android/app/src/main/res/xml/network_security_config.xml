@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  This app is a client for a self-hosted TrendPosT server whose address
+  the user enters at first launch (see src/components/HostGate.tsx) — it
+  could be a plain http:// LAN address (e.g. a machine on the same Wi-Fi
+  running `npm run dev`), which Android blocks by default. Allowing
+  cleartext broadly (rather than pinning specific domains, which isn't
+  possible since the host isn't known at build time) only affects this
+  app's own outgoing requests; it does not weaken TLS certificate
+  validation for https:// hosts, which is unaffected by this file.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

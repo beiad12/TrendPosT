@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { isNativeApp } from "../lib/api.js";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -36,7 +37,7 @@ export default function InstallButton() {
     };
   }, []);
 
-  if (installed || !deferredPrompt) return null;
+  if (isNativeApp || installed || !deferredPrompt) return null;
 
   async function handleInstall() {
     if (!deferredPrompt) return;

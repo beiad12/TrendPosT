@@ -381,6 +381,63 @@ composites that logo on top of everything else automatically
 to the output image size. No per-post setup, and it's optional: skip
 uploading one and renders are unaffected.
 
+## Android app
+
+The client (`client/`) is also packaged as a real Android app via
+[Capacitor](https://capacitorjs.com) — it's the same React UI, wrapped in a
+native shell (`client/android/`), that talks to a TrendPosT server you host
+yourself (this repo's `server/`, running wherever you deploy it) rather than
+bundling a server on the phone.
+
+**How it connects:** the app has no hardcoded backend. On first launch it
+shows a "Connect to your TrendPosT server" screen — enter your server's URL
+(a real domain like `https://trendpost.example.com`, or a LAN address like
+`http://192.168.1.20:4000` if you're running the server on your own machine
+and testing from a phone on the same Wi-Fi). It checks `GET /api/health` to
+confirm the server's reachable, then remembers the URL. Change it later from
+Settings → "Server". Plain `http://` addresses work out of the box (a
+network security config permits cleartext specifically for this app's own
+requests — see `client/android/app/src/main/res/xml/network_security_config.xml`);
+this does not weaken TLS validation for `https://` hosts.
+
+**Building the APK** — this repo doesn't ship a pre-built `.apk` (producing
+one requires the Android SDK, which isn't part of this repo or a Node
+toolchain). Two ways to get one:
+
+1. **Android Studio (easiest):** install [Android Studio](https://developer.android.com/studio)
+   (it bundles the SDK), then:
+   ```bash
+   cd client
+   npm install
+   npm run build        # builds the web app into dist/
+   npx cap sync android # copies dist/ into the native project
+   npx cap open android # opens client/android/ in Android Studio
+   ```
+   In Android Studio: **Build → Build Bundle(s) / APK(s) → Build APK(s)**.
+   The APK lands under `client/android/app/build/outputs/apk/debug/`.
+
+2. **Command line**, once you have the Android SDK installed and
+   `ANDROID_HOME`/`ANDROID_SDK_ROOT` set:
+   ```bash
+   cd client && npm install && npm run build && npx cap sync android
+   cd android && ./gradlew assembleDebug
+   # APK: client/android/app/build/outputs/apk/debug/app-debug.apk
+   ```
+   For a release build (`./gradlew assembleRelease`) you'll additionally
+   need to sign it with your own keystore — see
+   [Capacitor's Android docs](https://capacitorjs.com/docs/android/deploying-to-google-play)
+   for the signing steps.
+
+**After any change to `client/src/`**, re-run `npm run build && npx cap sync
+android` before rebuilding the APK — the native app loads the bundled
+`dist/` output, not a live dev server, so it's a static snapshot that needs
+re-syncing (same as any Capacitor app).
+
+**Server-side CORS:** the packaged app's origin is already allow-listed by
+default (see `CLIENT_ORIGIN` in `server/.env.example`) — no server
+configuration needed unless you've customized `CLIENT_ORIGIN` yourself, in
+which case add the app's origin to that list too.
+
 ## Security
 
 - AI provider API keys are encrypted at rest with AES-256-GCM

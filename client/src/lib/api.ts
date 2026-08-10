@@ -1,3 +1,36 @@
+import { Capacitor } from "@capacitor/core";
+
+const HOST_STORAGE_KEY = "trendpost_host";
+
+/**
+ * Where the backend lives. Empty string means "same origin" — the normal
+ * case for the web/PWA build, served by (or proxied through) the same
+ * server it talks to, so a plain relative `/api/...` fetch just works.
+ *
+ * The packaged native app has no such origin (it loads the bundled
+ * `dist/` build from a local `https://localhost` shell — see
+ * capacitor.config.ts), so it needs an absolute host the user enters once
+ * (see HostGate.tsx / the Settings page's "Server" panel) and which is
+ * persisted here.
+ */
+export function getApiHost(): string {
+  return (localStorage.getItem(HOST_STORAGE_KEY) ?? "").replace(/\/+$/, "");
+}
+
+export function setApiHost(host: string): void {
+  const trimmed = host.trim().replace(/\/+$/, "");
+  if (trimmed) localStorage.setItem(HOST_STORAGE_KEY, trimmed);
+  else localStorage.removeItem(HOST_STORAGE_KEY);
+}
+
+/** True inside the packaged Android/iOS app shell — false for the plain web/PWA build. */
+export const isNativeApp = Capacitor.isNativePlatform();
+
+/** Resolves a server-relative path (e.g. "/api/trends" or "/static/branding/x.png") against the configured host. */
+export function resolveUrl(path: string): string {
+  return `${getApiHost()}${path}`;
+}
+
 export type TrendType = "BREAKING" | "RISING" | "VIRAL" | "POPULAR" | "STABLE";
 
 export interface ScoreBreakdown {
@@ -211,7 +244,7 @@ function extractErrorMessage(body: any, status: number): string {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`/api${path}`, init);
+  const res = await fetch(resolveUrl(`/api${path}`), init);
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(extractErrorMessage(body, res.status));
@@ -295,7 +328,7 @@ export const api = {
   },
   render: {
     render: async (form: FormData): Promise<Blob> => {
-      const res = await fetch("/api/render", { method: "POST", body: form });
+      const res = await fetch(resolveUrl("/api/render"), { method: "POST", body: form });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body?.error || `Render failed: ${res.status}`);
