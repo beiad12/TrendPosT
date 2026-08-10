@@ -5,7 +5,8 @@
 export interface QueryGroup {
   key: string;
   label: string;
-  language: "ar" | "fr" | "en";
+  /** A Google News `hl` code — "ar"/"fr"/"en" for the curated Morocco groups below, but any hl Google News accepts for a dynamically-built country query group (see buildCountryQueryGroup). */
+  language: string;
   country: string;
   categoryHint: string;
   queries: string[];
@@ -75,6 +76,34 @@ export const GOOGLE_NEWS_QUERY_GROUPS: QueryGroup[] = [
     ],
   },
 ];
+
+import type { Country } from "./countries.js";
+
+/**
+ * Builds a generic query group for an arbitrary country (the map/country
+ * picker) — the same shape as the hand-curated Morocco groups above, but
+ * generated from the country's name rather than a curated keyword list
+ * (writing bespoke Arabic/French-style keyword sets for 170+ countries
+ * isn't practical by hand; these generic English-pattern queries work
+ * reasonably well against Google News for any country).
+ */
+export function buildCountryQueryGroup(country: Country): QueryGroup {
+  return {
+    key: `country-${country.code}`,
+    label: `Google News — ${country.name}`,
+    language: country.language as QueryGroup["language"],
+    country: country.code,
+    categoryHint: "world",
+    queries: [
+      country.name,
+      `${country.name} news`,
+      `${country.name} today`,
+      `breaking news ${country.name}`,
+      `${country.name} sports`,
+      `${country.name} viral`,
+    ],
+  };
+}
 
 /** Recognized Moroccan publishers — used for source-domain corroboration weighting, not as direct RSS endpoints. */
 export const KNOWN_MOROCCAN_PUBLISHERS = [

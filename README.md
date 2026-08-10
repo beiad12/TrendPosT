@@ -29,6 +29,8 @@ together).
 | **Multi-AI caption generator** | ✅ Unified router for Claude / GPT / Mistral / Gemini / Grok behind one interface; "Compare All" mode; 5 tone variants × 3 language options + hashtags + suggested post time. |
 | **Encrypted API-key vault** | ✅ AES-256-GCM at rest, per-provider, Settings UI, keys never logged or echoed back. |
 | **Page logo watermark** | ✅ Upload your page's logo once in Settings; it's stamped automatically onto every rendered post (AI Auto Post *and* manual templates) at a configurable corner — no per-post setup. See "Page logo" below. |
+| **4K render quality** | ✅ Final exports default to a true 4K scale (3840px long edge), not the 1080px design-canvas size — every zone (text, photo, gradient, pill) renders natively at that resolution instead of an upscaled-afterward blur. |
+| **World map country picker** | ✅ Click any of ~175 countries on a real interactive map (or use the dropdown) to fetch that country's own trending news — its own Google News + GDELT fetch, its own cache, its own relevance scoring (against *that* country's name, not always Morocco's). The Morocco-and-world home dashboard is untouched by this. See "Trend engine — country picker" below. |
 | **Dashboard UI** | ✅ Ranked trend list → caption generation modal → template + headline + photo → live render preview → download. |
 | X/Twitter trending source | 🚧 Not wired — X's trending-topics data requires a paid API tier (no free/no-key public endpoint exists the way Google News/GDELT have one). The extension point is documented in `server/src/services/trends/aggregator... engine.ts` and `providers/index.ts`; it's intentionally not stubbed with fake data. |
 | Google Trends | 🚧 Google discontinued the free public "daily trends" RSS this project used to call (now 404s everywhere) — there's no other free/no-key replacement. Reports `not_configured` rather than being faked; wired as a real optional provider (`providers/googleTrends.ts`) ready for a paid Trends API integration. |
@@ -318,10 +320,20 @@ Add a new source by writing a module implementing `TrendProvider` (`providers/ty
 ### API
 
 - `GET /api/trends?country=&language=&category=&limit=&minScore=&hours=&status=&refresh=1` — the ranked list, filterable; `refresh=1` bypasses the cache.
-- `GET /api/trends/:id` — one trend's full detail: every supporting article, its sources, and the score breakdown.
-- `POST /api/trends/refresh` — manually triggers a live refresh across every provider.
+- `GET /api/trends/:id?country=` — one trend's full detail: every supporting article, its sources, and the score breakdown.
+- `POST /api/trends/refresh?country=` — manually triggers a live refresh across every provider (or just that country's).
+- `GET /api/trends/countries` — the full country list the map/picker renders from.
 
 Every response includes `sourceHealth` (what the client's "Trend sources" panel on the dashboard renders) and, when relevant, a `warning` field (`showing_cached` / `no_live_data` / `refresh_failed_showing_cached`).
+
+### Trend engine — country picker
+
+The dashboard defaults to Morocco (`country` omitted or `MA`) — that's the unchanged home feed described above. Passing any other `country` (an ISO 3166-1 alpha-2 code, e.g. `FR`, `JP`, `BR` — see `server/src/services/trends/countries.ts`, ~175 countries) routes to a completely separate fetch/cache path:
+
+- **Providers**: `fetchGoogleNewsForCountry()` / `fetchGdeltForCountry()` (`providers/googleNews.ts` / `providers/gdelt.ts`) build a generic query group from the country's own name (`config.ts#buildCountryQueryGroup`: `"{country}"`, `"{country} news"`, `"{country} today"`, `"breaking news {country}"`, `"{country} sports"`, `"{country} viral"`) rather than the hand-curated Arabic/French keyword lists Morocco gets — writing bespoke keyword sets for 175 countries by hand isn't practical, and this works reasonably well against both Google News and GDELT for any country.
+- **Isolation**: each country gets its own `sourceHealth` entries (`google_news:FR`, `gdelt:FR`, ...) and its own cache (`engine.ts#getTrendsForCountry`, keyed by country code) — picking France never touches, refetches, or shows up in Morocco's cache, and vice versa.
+- **Relevance scoring**: `scoreCluster()`'s "relevance" factor is generalized to accept a target-country keyword (`scoring.ts#RelevanceKeywords`) — Morocco's dashboard uses its curated keyword set as before; a country-scoped fetch scores relevance against *that* country's own name instead, so a France-relevant story on the France feed still scores full relevance even though it never mentions Morocco.
+- **Client**: `WorldMapPicker.tsx` — a real interactive world map (`react-simple-maps` + `world-atlas`'s bundled Natural-Earth topojson, no CDN dependency at runtime) with a dropdown fallback; clicking a country calls `onChange(code)`, which re-fetches the dashboard scoped to it.
 
 ## Page logo
 

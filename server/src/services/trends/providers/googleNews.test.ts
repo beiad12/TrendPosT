@@ -57,3 +57,32 @@ describe("googleNewsProvider", () => {
     await expect(googleNewsProvider.fetch()).rejects.toThrow();
   });
 });
+
+describe("fetchGoogleNewsForCountry", () => {
+  beforeEach(() => {
+    parseURL.mockReset();
+    vi.resetModules();
+  });
+
+  it("tags articles with a per-country provider id and the requested country/language", async () => {
+    parseURL.mockResolvedValue({
+      items: [{ title: "Big story in Japan - NHK", link: "https://nhk.jp/a", pubDate: "Sun, 09 Aug 2026 12:00:00 GMT" }],
+    });
+
+    const { fetchGoogleNewsForCountry } = await import("./googleNews.js");
+    const { getCountry } = await import("../countries.js");
+    const articles = await fetchGoogleNewsForCountry(getCountry("JP")!);
+
+    expect(articles.length).toBeGreaterThan(0);
+    expect(articles[0].provider).toBe("google_news:JP");
+    expect(articles[0].country).toBe("JP");
+    expect(articles[0].language).toBe("ja");
+  });
+
+  it("throws only when every query for that country fails, isolated from other countries", async () => {
+    parseURL.mockRejectedValue(new Error("Status code 500"));
+    const { fetchGoogleNewsForCountry } = await import("./googleNews.js");
+    const { getCountry } = await import("../countries.js");
+    await expect(fetchGoogleNewsForCountry(getCountry("BR")!)).rejects.toThrow();
+  });
+});

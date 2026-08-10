@@ -54,7 +54,15 @@ export interface TrendsResponse {
   generatedAt: string;
   sources: string[];
   sourceHealth: ProviderHealth[];
+  country?: string;
   warning?: "no_live_data" | "showing_cached" | "refresh_failed_showing_cached";
+}
+
+export interface CountryOption {
+  code: string;
+  name: string;
+  mapName: string;
+  language: string;
 }
 
 export type Provider = "anthropic" | "openai" | "mistral" | "google" | "xai";
@@ -203,19 +211,26 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   trends: {
-    list: (params: { refresh?: boolean; category?: string; language?: string; status?: string; limit?: number } = {}) => {
+    list: (
+      params: { refresh?: boolean; category?: string; language?: string; status?: string; limit?: number; country?: string } = {}
+    ) => {
       const qs = new URLSearchParams();
       if (params.refresh) qs.set("refresh", "1");
       if (params.category) qs.set("category", params.category);
       if (params.language) qs.set("language", params.language);
       if (params.status) qs.set("status", params.status);
       if (params.limit) qs.set("limit", String(params.limit));
+      if (params.country) qs.set("country", params.country);
       const query = qs.toString();
       return request<TrendsResponse>(`/trends${query ? `?${query}` : ""}`);
     },
-    detail: (id: string) =>
-      request<{ trend: Trend; articles: unknown[]; sources: string[]; scoreBreakdown: ScoreBreakdown }>(`/trends/${id}`),
-    refresh: () => request<TrendsResponse>("/trends/refresh", { method: "POST" }),
+    detail: (id: string, country?: string) =>
+      request<{ trend: Trend; articles: unknown[]; sources: string[]; scoreBreakdown: ScoreBreakdown }>(
+        `/trends/${id}${country ? `?country=${country}` : ""}`
+      ),
+    refresh: (country?: string) =>
+      request<TrendsResponse>(`/trends/refresh${country ? `?country=${country}` : ""}`, { method: "POST" }),
+    countries: () => request<{ countries: CountryOption[] }>("/trends/countries"),
   },
   settings: {
     listKeys: () => request<{ providers: ProviderStatus[] }>("/settings/keys"),

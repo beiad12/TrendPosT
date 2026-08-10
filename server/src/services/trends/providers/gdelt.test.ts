@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { gdeltProvider } from "./gdelt.js";
+import { gdeltProvider, fetchGdeltForCountry } from "./gdelt.js";
+import { getCountry } from "../countries.js";
 
 function jsonResponse(body: unknown, ok = true, status = 200) {
   return {
@@ -73,5 +74,44 @@ describe("gdeltProvider", () => {
   it("treats malformed JSON as a query failure, not a crash", async () => {
     (global.fetch as any).mockResolvedValue({ ok: true, status: 200, text: async () => "<html>not json</html>" } as Response);
     await expect(gdeltProvider.fetch()).rejects.toThrow();
+  });
+});
+
+describe("fetchGdeltForCountry", () => {
+  const originalFetch = global.fetch;
+
+  beforeEach(() => {
+    global.fetch = vi.fn();
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    vi.restoreAllMocks();
+  });
+
+  it("tags articles with the requested country code, overriding GDELT's own sourcecountry", async () => {
+    (global.fetch as any).mockResolvedValue(
+      jsonResponse({
+        articles: [
+          {
+            url: "https://elpais.com/a",
+            title: "Big story about Spain",
+            seendate: "20260809T120000Z",
+            domain: "elpais.com",
+            sourcecountry: "Some Other Country", // deliberately mismatched -- the requested country should win
+          },
+        ],
+      })
+    );
+
+    const articles = await fetchGdeltForCountry(getCountry("ES")!);
+    expect(articles.length).toBeGreaterThan(0);
+    expect(articles[0].country).toBe("ES");
+    expect(articles[0].provider).toBe("gdelt:ES");
+  });
+
+  it("throws only when every query for that country fails", async () => {
+    (global.fetch as any).mockResolvedValue(errorResponse(500));
+    await expect(fetchGdeltForCountry(getCountry("DE")!)).rejects.toThrow();
   });
 });

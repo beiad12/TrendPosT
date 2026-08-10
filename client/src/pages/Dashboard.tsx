@@ -3,6 +3,7 @@ import { api, Trend, TrendType, ProviderHealth } from "../lib/api.js";
 import ScoreBadge from "../components/ScoreBadge.js";
 import SourceHealthPanel from "../components/SourceHealthPanel.js";
 import TrendDetailModal from "../components/TrendDetailModal.js";
+import WorldMapPicker, { flagEmoji } from "../components/WorldMapPicker.js";
 
 const TREND_TYPE_STYLE: Record<TrendType, { label: string; className: string }> = {
   BREAKING: { label: "🔥 BREAKING", className: "bg-red-600/20 text-red-400 border-red-600/40" },
@@ -25,6 +26,8 @@ const WARNING_MESSAGE: Record<string, string> = {
 };
 
 export default function Dashboard() {
+  const [country, setCountry] = useState("MA");
+  const [showMap, setShowMap] = useState(false);
   const [trends, setTrends] = useState<Trend[]>([]);
   const [sourceHealth, setSourceHealth] = useState<ProviderHealth[]>([]);
   const [warning, setWarning] = useState<string | undefined>();
@@ -33,11 +36,11 @@ export default function Dashboard() {
   const [selected, setSelected] = useState<Trend | null>(null);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
 
-  async function load(refresh = false) {
+  async function load(refresh = false, countryCode = country) {
     setLoading(true);
     setError(null);
     try {
-      const res = refresh ? await api.trends.refresh() : await api.trends.list();
+      const res = refresh ? await api.trends.refresh(countryCode) : await api.trends.list({ country: countryCode });
       setTrends(res.trends);
       setSourceHealth(res.sourceHealth);
       setWarning(res.warning);
@@ -50,26 +53,43 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
-    load();
-  }, []);
+    load(false, country);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [country]);
 
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-2xl font-bold">🔥 Viral Now — Morocco &amp; the World</h1>
+          <h1 className="text-2xl font-bold">
+            🔥 Viral Now — {country === "MA" ? "Morocco & the World" : `${flagEmoji(country)} Worldwide pick`}
+          </h1>
           {generatedAt && (
             <p className="text-xs text-neutral-500">Updated {new Date(generatedAt).toLocaleTimeString()}</p>
           )}
         </div>
-        <button
-          onClick={() => load(true)}
-          disabled={loading}
-          className="bg-neutral-800 hover:bg-neutral-700 rounded-md px-3 py-1.5 text-sm disabled:opacity-50"
-        >
-          {loading ? "Refreshing…" : "Refresh"}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowMap((s) => !s)}
+            className="bg-neutral-800 hover:bg-neutral-700 rounded-md px-3 py-1.5 text-sm"
+          >
+            🗺️ {showMap ? "Hide map" : "Choose country"}
+          </button>
+          <button
+            onClick={() => load(true)}
+            disabled={loading}
+            className="bg-neutral-800 hover:bg-neutral-700 rounded-md px-3 py-1.5 text-sm disabled:opacity-50"
+          >
+            {loading ? "Refreshing…" : "Refresh"}
+          </button>
+        </div>
       </div>
+
+      {showMap && (
+        <div className="mb-4">
+          <WorldMapPicker value={country} onChange={setCountry} />
+        </div>
+      )}
 
       <SourceHealthPanel sources={sourceHealth} />
 

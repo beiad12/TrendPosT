@@ -123,3 +123,89 @@ describe("TrendEngine", () => {
     expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("TrendEngine — per-country (map picker)", () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  function franceArticle(overrides: Partial<RawArticle> = {}): RawArticle {
+    return article({ id: "fr1", title: "Big news happening in France today", country: "FR", language: "fr", provider: "google_news:FR", ...overrides });
+  }
+
+  it("fetches from the country-specific providers, tagged and scoped to that country", async () => {
+    const googleNewsSpy = vi.fn(async () => [franceArticle()]);
+    const gdeltSpy = vi.fn(async () => []);
+    vi.doMock("./providers/googleNews.js", async (importOriginal) => ({
+      ...(await importOriginal<any>()),
+      fetchGoogleNewsForCountry: googleNewsSpy,
+    }));
+    vi.doMock("./providers/gdelt.js", async (importOriginal) => ({
+      ...(await importOriginal<any>()),
+      fetchGdeltForCountry: gdeltSpy,
+    }));
+
+    const { getTrendsForCountry } = await import("./engine.js");
+    const { getCountry } = await import("./countries.js");
+    const result = await getTrendsForCountry(getCountry("FR")!, true);
+
+    expect(googleNewsSpy).toHaveBeenCalledTimes(1);
+    expect(gdeltSpy).toHaveBeenCalledTimes(1);
+    expect(result.trends.length).toBeGreaterThan(0);
+    expect(result.trends[0].title).toContain("France");
+  });
+
+  it("scores relevance against the selected country's own name, not Morocco's keywords", async () => {
+    vi.doMock("./providers/googleNews.js", async (importOriginal) => ({
+      ...(await importOriginal<any>()),
+      fetchGoogleNewsForCountry: async () => [franceArticle({ title: "France announces a major new policy today" })],
+    }));
+    vi.doMock("./providers/gdelt.js", async (importOriginal) => ({
+      ...(await importOriginal<any>()),
+      fetchGdeltForCountry: async () => [],
+    }));
+
+    const { getTrendsForCountry } = await import("./engine.js");
+    const { getCountry } = await import("./countries.js");
+    const result = await getTrendsForCountry(getCountry("FR")!, true);
+
+    // A France-relevant headline fetched for France should score full relevance,
+    // even though it never mentions Morocco.
+    expect(result.trends[0].scoreBreakdown.moroccoRelevance).toBe(15);
+  });
+
+  it("keeps a separate cache per country -- refreshing France doesn't refetch Japan", async () => {
+    const franceSpy = vi.fn(async () => [franceArticle()]);
+    vi.doMock("./providers/googleNews.js", async (importOriginal) => ({
+      ...(await importOriginal<any>()),
+      fetchGoogleNewsForCountry: franceSpy,
+    }));
+    vi.doMock("./providers/gdelt.js", async (importOriginal) => ({
+      ...(await importOriginal<any>()),
+      fetchGdeltForCountry: async () => [],
+    }));
+
+    const { getTrendsForCountry } = await import("./engine.js");
+    const { getCountry } = await import("./countries.js");
+    await getTrendsForCountry(getCountry("FR")!, true);
+    await getTrendsForCountry(getCountry("FR")!, false); // within TTL -> cached, no new call
+    expect(franceSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("never crashes when both country providers fail", async () => {
+    vi.doMock("./providers/googleNews.js", async (importOriginal) => ({
+      ...(await importOriginal<any>()),
+      fetchGoogleNewsForCountry: async () => { throw new Error("Status code 500"); },
+    }));
+    vi.doMock("./providers/gdelt.js", async (importOriginal) => ({
+      ...(await importOriginal<any>()),
+      fetchGdeltForCountry: async () => { throw new Error("Status code 500"); },
+    }));
+
+    const { getTrendsForCountry } = await import("./engine.js");
+    const { getCountry } = await import("./countries.js");
+    const result = await getTrendsForCountry(getCountry("DE")!, true);
+    expect(result.trends).toEqual([]);
+    expect(result.warning).toBe("no_live_data");
+  });
+});

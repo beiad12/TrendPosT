@@ -47,10 +47,22 @@ function velocity(articles: { discoveredAt: string }[], now: number): { velocity
   return { velocityPerHour: lastHour, factor };
 }
 
-function moroccoRelevanceFactor(text: string): number {
-  if (MOROCCO_HIGH_RELEVANCE.test(text)) return 1.0;
-  if (MOROCCO_MEDIUM_RELEVANCE.test(text)) return 0.5;
+export interface RelevanceKeywords {
+  high: RegExp;
+  medium?: RegExp;
+}
+
+const DEFAULT_RELEVANCE: RelevanceKeywords = { high: MOROCCO_HIGH_RELEVANCE, medium: MOROCCO_MEDIUM_RELEVANCE };
+
+function relevanceFactor(text: string, relevance: RelevanceKeywords): number {
+  if (relevance.high.test(text)) return 1.0;
+  if (relevance.medium?.test(text)) return 0.5;
   return 0.15;
+}
+
+/** Escapes regex special characters so a country name can be dropped straight into a RegExp. */
+export function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /**
@@ -92,8 +104,14 @@ function classifyTrendType(ageMinutes: number, sourceCount: number, velocityPerH
  * Scores a story cluster 0-100 across the weighted factors in
  * config.ts#SCORE_WEIGHTS, classifies its category and trend type, and
  * returns the fully-formed TrendCluster the rest of the app consumes.
+ *
+ * `relevance` defaults to Morocco's curated keyword set (the app's home
+ * dashboard); the per-country map/picker passes a keyword built from the
+ * selected country's own name instead, so "relevance" always means
+ * "relevant to whichever place this fetch was actually about", not always
+ * literally Morocco.
  */
-export function scoreCluster(cluster: UnscoredCluster, now: Date = new Date()): TrendCluster {
+export function scoreCluster(cluster: UnscoredCluster, now: Date = new Date(), relevance: RelevanceKeywords = DEFAULT_RELEVANCE): TrendCluster {
   const nowMs = now.getTime();
   const text = `${cluster.title} ${cluster.description ?? ""}`;
 
@@ -109,7 +127,7 @@ export function scoreCluster(cluster: UnscoredCluster, now: Date = new Date()): 
     freshness: Math.round(freshnessFactor(ageMinutes, isAccelerating) * SCORE_WEIGHTS.freshness),
     sourceCount: Math.round(sourceCountFactor(cluster.sourceCount) * SCORE_WEIGHTS.sourceCount),
     velocity: Math.round(velocityFactorValue * SCORE_WEIGHTS.velocity),
-    moroccoRelevance: Math.round(moroccoRelevanceFactor(text) * SCORE_WEIGHTS.moroccoRelevance),
+    moroccoRelevance: Math.round(relevanceFactor(text, relevance) * SCORE_WEIGHTS.moroccoRelevance),
     social: Math.round(socialFactor(cluster.articles) * SCORE_WEIGHTS.social),
     category: Math.round(category.importance * SCORE_WEIGHTS.category),
     viralPotential: Math.round(viralPotentialFactor(text) * SCORE_WEIGHTS.viralPotential),

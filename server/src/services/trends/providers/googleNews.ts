@@ -1,7 +1,8 @@
 import Parser from "rss-parser";
-import { GOOGLE_NEWS_QUERY_GROUPS, PROVIDERS_CONFIG, type QueryGroup } from "../config.js";
+import { buildCountryQueryGroup, GOOGLE_NEWS_QUERY_GROUPS, PROVIDERS_CONFIG, type QueryGroup } from "../config.js";
 import { cleanUrl, domainFromUrl, stableIdFromUrl } from "../normalize.js";
 import { mapWithConcurrency } from "../concurrency.js";
+import type { Country } from "../countries.js";
 import type { RawArticle } from "../types.js";
 import type { TrendProvider } from "./types.js";
 
@@ -34,7 +35,7 @@ function stripSourceSuffix(title: string, sourceName: string): string {
   return title.endsWith(suffix) ? title.slice(0, -suffix.length).trim() : title;
 }
 
-async function fetchQuery(group: QueryGroup, query: string): Promise<RawArticle[]> {
+async function fetchQuery(group: QueryGroup, query: string, providerId = "google_news"): Promise<RawArticle[]> {
   const url = `${BASE_URL}?q=${encodeURIComponent(query)}&hl=${group.language}&gl=${group.country}&ceid=${group.country}:${group.language}`;
   const feed = await parser.parseURL(url);
   const now = new Date().toISOString();
@@ -59,7 +60,7 @@ async function fetchQuery(group: QueryGroup, query: string): Promise<RawArticle[
       description: typeof item.contentSnippet === "string" ? item.contentSnippet.slice(0, 300) : null,
       imageUrl: null, // Google News RSS doesn't reliably carry article images
       keywords: [query],
-      provider: "google_news",
+      provider: providerId,
     } satisfies RawArticle;
   });
 }
@@ -96,3 +97,31 @@ export const googleNewsProvider: TrendProvider = {
     return articles;
   },
 };
+
+/**
+ * On-demand Google News fetch for an arbitrary country (the map/country
+ * picker) — same fetch/isolation logic as the default provider, but scoped
+ * to one country's generic query group instead of the curated Morocco set.
+ * Tags articles with a per-country provider id (`google_news:MA`) so the
+ * source-health panel and article store can track it independently.
+ */
+export async function fetchGoogleNewsForCountry(country: Country): Promise<RawArticle[]> {
+  const group = buildCountryQueryGroup(country);
+  const providerId = `google_news:${country.code}`;
+  const results = await mapWithConcurrency(group.queries, 4, (query) => fetchQuery(group, query, providerId));
+
+  const articles: RawArticle[] = [];
+  let failedQueries = 0;
+  for (const r of results) {
+    if (r.status === "fulfilled") articles.push(...r.value);
+    else failedQueries++;
+  }
+
+  if (failedQueries > 0) {
+    console.log(`[TrendEngine] ${JSON.stringify({ provider: providerId, note: "some_queries_failed", failedQueries, totalQueries: group.queries.length })}`);
+  }
+  if (articles.length === 0 && failedQueries === group.queries.length) {
+    throw new Error(`All ${group.queries.length} Google News queries failed for ${country.name}`);
+  }
+  return articles;
+}
