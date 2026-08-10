@@ -71,3 +71,44 @@ describe("searchWebImage — configured", () => {
     await expect(searchWebImage(["a", "b"])).resolves.toBeNull();
   });
 });
+
+describe("searchWebImage — both Unsplash and Pexels configured", () => {
+  const originalFetch = global.fetch;
+
+  beforeEach(() => {
+    process.env.UNSPLASH_ACCESS_KEY = "unsplash_test_key";
+    process.env.PEXELS_API_KEY = "pexels_test_key";
+    vi.resetModules();
+    global.fetch = vi.fn();
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    delete process.env.UNSPLASH_ACCESS_KEY;
+    delete process.env.PEXELS_API_KEY;
+  });
+
+  it("falls through to Pexels for the same query when Unsplash has nothing", async () => {
+    (global.fetch as any).mockImplementation(async (url: string) => {
+      if (url.includes("unsplash")) return { ok: true, json: async () => ({ results: [] }) };
+      return { ok: true, json: async () => ({ photos: [{ src: { large2x: "https://images.pexels.com/found.jpg" } }] }) };
+    });
+
+    const { searchWebImage } = await import("./webImageSearch.js");
+    const result = await searchWebImage(["a rare headline"]);
+    expect(result).toBe("https://images.pexels.com/found.jpg");
+  });
+
+  it("never calls Pexels when Unsplash already found something for that query", async () => {
+    const pexelsCall = vi.fn();
+    (global.fetch as any).mockImplementation(async (url: string) => {
+      if (url.includes("unsplash")) return { ok: true, json: async () => ({ results: [{ urls: { raw: "https://images.unsplash.com/x", regular: "x" } }] }) };
+      pexelsCall();
+      return { ok: true, json: async () => ({ photos: [] }) };
+    });
+
+    const { searchWebImage } = await import("./webImageSearch.js");
+    await searchWebImage(["a headline"]);
+    expect(pexelsCall).not.toHaveBeenCalled();
+  });
+});

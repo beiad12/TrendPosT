@@ -1,66 +1,77 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("../ai/keyVault.js", () => ({
-  getProviderApiKey: vi.fn(),
-}));
-
-describe("generateAiImage — no OpenAI key configured", () => {
-  const originalFetch = global.fetch;
-
+describe("generateAiImage — orchestrator", () => {
   beforeEach(() => {
     vi.resetModules();
-    global.fetch = vi.fn();
   });
 
-  afterEach(() => {
-    global.fetch = originalFetch;
-  });
+  it("prefers Pollinations (free, no key needed) and never touches OpenAI when it succeeds", async () => {
+    const pollinationsBuffer = Buffer.from("pollinations-bytes");
+    const pollinationsFn = vi.fn(async () => pollinationsBuffer);
+    const openaiFn = vi.fn(async () => Buffer.from("should-not-be-called"));
 
-  it("returns null without ever calling the API", async () => {
-    const { getProviderApiKey } = await import("../ai/keyVault.js");
-    (getProviderApiKey as any).mockReturnValue(null);
+    vi.doMock("./sources/pollinations.js", () => ({ generatePollinationsImage: pollinationsFn, pollinationsConfigured: true }));
+    vi.doMock("./sources/openaiImage.js", () => ({ generateOpenAiImage: openaiFn, openaiImageConfigured: () => true }));
 
     const { generateAiImage } = await import("./aiImageGen.js");
     const result = await generateAiImage("a photo of a storm");
-    expect(result).toBeNull();
-    expect(global.fetch).not.toHaveBeenCalled();
-  });
-});
 
-describe("generateAiImage — configured", () => {
-  const originalFetch = global.fetch;
-
-  beforeEach(() => {
-    vi.resetModules();
-    global.fetch = vi.fn();
+    expect(result.equals(pollinationsBuffer)).toBe(true);
+    expect(pollinationsFn).toHaveBeenCalledTimes(1);
+    expect(openaiFn).not.toHaveBeenCalled();
   });
 
-  afterEach(() => {
-    global.fetch = originalFetch;
-  });
-
-  it("returns a real Buffer decoded from the API's base64 response", async () => {
-    const { getProviderApiKey } = await import("../ai/keyVault.js");
-    (getProviderApiKey as any).mockReturnValue("sk-test");
-
-    const fakeImageBytes = Buffer.from("fake-png-bytes");
-    (global.fetch as any).mockResolvedValue({
-      ok: true,
-      json: async () => ({ data: [{ b64_json: fakeImageBytes.toString("base64") }] }),
-    });
+  it("falls through to OpenAI when Pollinations fails and OpenAI is configured", async () => {
+    const openaiBuffer = Buffer.from("openai-bytes");
+    vi.doMock("./sources/pollinations.js", () => ({
+      generatePollinationsImage: vi.fn(async () => {
+        throw new Error("Pollinations timed out");
+      }),
+      pollinationsConfigured: true,
+    }));
+    vi.doMock("./sources/openaiImage.js", () => ({
+      generateOpenAiImage: vi.fn(async () => openaiBuffer),
+      openaiImageConfigured: () => true,
+    }));
 
     const { generateAiImage } = await import("./aiImageGen.js");
-    const result = await generateAiImage("a photorealistic photo of a storm");
-    expect(result).toBeInstanceOf(Buffer);
-    expect(result!.equals(fakeImageBytes)).toBe(true);
+    const result = await generateAiImage("a photo of a storm");
+    expect(result.equals(openaiBuffer)).toBe(true);
   });
 
-  it("throws (not a silent null) on an API error, so the caller can log/report it", async () => {
-    const { getProviderApiKey } = await import("../ai/keyVault.js");
-    (getProviderApiKey as any).mockReturnValue("sk-test");
-    (global.fetch as any).mockResolvedValue({ ok: false, status: 429, text: async () => "rate limited" });
+  it("never calls OpenAI when it isn't configured, and throws a combined error if Pollinations also failed", async () => {
+    const openaiFn = vi.fn();
+    vi.doMock("./sources/pollinations.js", () => ({
+      generatePollinationsImage: vi.fn(async () => {
+        throw new Error("Pollinations rate-limited");
+      }),
+      pollinationsConfigured: true,
+    }));
+    vi.doMock("./sources/openaiImage.js", () => ({
+      generateOpenAiImage: openaiFn,
+      openaiImageConfigured: () => false,
+    }));
 
     const { generateAiImage } = await import("./aiImageGen.js");
-    await expect(generateAiImage("prompt")).rejects.toThrow();
+    await expect(generateAiImage("prompt")).rejects.toThrow(/Pollinations rate-limited/);
+    expect(openaiFn).not.toHaveBeenCalled();
+  });
+
+  it("throws a combined error naming both failures when everything fails", async () => {
+    vi.doMock("./sources/pollinations.js", () => ({
+      generatePollinationsImage: vi.fn(async () => {
+        throw new Error("Pollinations down");
+      }),
+      pollinationsConfigured: true,
+    }));
+    vi.doMock("./sources/openaiImage.js", () => ({
+      generateOpenAiImage: vi.fn(async () => {
+        throw new Error("OpenAI quota exceeded");
+      }),
+      openaiImageConfigured: () => true,
+    }));
+
+    const { generateAiImage } = await import("./aiImageGen.js");
+    await expect(generateAiImage("prompt")).rejects.toThrow(/Pollinations down.*OpenAI quota exceeded/s);
   });
 });

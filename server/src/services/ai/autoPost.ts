@@ -70,15 +70,16 @@ async function resolvePhoto(trend: AutoPostRequest["trend"]): Promise<{ buffer: 
   }
 
   try {
-    const generated = await generateAiImage(buildAiImagePrompt(summary));
-    if (generated) return { buffer: generated, source: "ai-generated" };
+    return { buffer: await generateAiImage(buildAiImagePrompt(summary)), source: "ai-generated" };
   } catch (err) {
     console.log(`[AutoPost] AI image generation failed: ${(err as Error)?.message}`);
   }
 
   throw new AutoPostInputError(
-    "This trend has no photo, no matching photo was found on the web, and AI image generation isn't available right now " +
-      "(add a free Unsplash key or an OpenAI key in Settings to enable those) — pick a trend with a photo, or use the manual Templates flow."
+    "This trend has no photo, no matching photo was found on the web, and AI image generation failed too " +
+      "(Pollinations, the free no-key AI generator, is tried automatically — it may be temporarily unavailable; " +
+      "add an OpenAI key in Settings for a second AI option, or a free Unsplash/Pexels key to widen the web search) " +
+      "— pick a trend with a photo, or use the manual Templates flow."
   );
 }
 

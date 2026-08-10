@@ -47,7 +47,11 @@ function mockCommonDeps(overrides: { imageSearchResult?: string | null; aiImageR
     searchWebImage: vi.fn(async () => overrides.imageSearchResult ?? null),
   }));
   vi.doMock("../media/aiImageGen.js", () => ({
-    generateAiImage: vi.fn(async () => overrides.aiImageResult ?? null),
+    // Matches the real contract: resolves with a Buffer on success, throws on failure (never resolves null).
+    generateAiImage: vi.fn(async () => {
+      if (overrides.aiImageResult) return overrides.aiImageResult;
+      throw new Error("AI image generation failed (Pollinations: down; OpenAI: not configured)");
+    }),
   }));
 }
 

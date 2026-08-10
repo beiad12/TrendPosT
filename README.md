@@ -143,26 +143,32 @@ A trend with no photo of its own no longer blocks Auto Post — it falls through
 real-photo-first chain instead of failing outright:
 
 1. **The trend's own source photo** (`imageUrl`), if it has one and it's still reachable.
-2. **Web image search** (`webImageSearch.ts`) — [Unsplash](https://unsplash.com/developers)
-   (free API key, email signup only). Tries the actual headline first, then falls back to
-   a category-level query (`imagePrompt.ts#buildWebSearchQueries`) — **weather gets its own
+2. **Web image search** (`webImageSearch.ts`) — tries two stock-photo sources per query,
+   [Unsplash](https://unsplash.com/developers) then [Pexels](https://www.pexels.com/api/)
+   (both free, email-signup-only API keys — a story one library's tagging misses still has
+   a shot with the other). Tries the actual headline first, then falls back to a
+   category-level query (`imagePrompt.ts#buildWebSearchQueries`) — **weather gets its own
    dedicated query** (`"{headline} weather"`, then `"weather storm sky clouds forecast"`),
    since a literal news headline rarely matches stock-photo tags the way a descriptive
-   weather query does. Reports as simply unavailable (not an error) without
-   `UNSPLASH_ACCESS_KEY` configured.
-3. **AI-generated imagery** (`aiImageGen.ts`) — OpenAI's Images API (DALL-E 3), reusing
-   whichever OpenAI key is already configured in Settings for captions, independent of
-   which provider you picked for the caption itself. The prompt
+   weather query does. Reports as simply unavailable (not an error) with neither key configured.
+3. **AI-generated imagery** (`aiImageGen.ts`) — tries
+   [**Pollinations**](https://pollinations.ai/) first, a **free image-generation API that
+   needs no API key at all**, so this fallback works out of the box on every install with
+   zero setup. Falls back to OpenAI's Images API (DALL-E 3) if Pollinations fails and an
+   OpenAI key happens to be configured in Settings (reused from captions, independent of
+   which provider you picked for the caption itself). The prompt
    (`imagePrompt.ts#buildAiImagePrompt`) is category-aware — weather again gets a
    dedicated "photorealistic press photograph capturing this weather event..." prompt —
    and explicitly steers away from fabricated readable text/watermarks/logos, a common
    AI-image artifact that would look wrong on a real post.
 
 Only once every option is genuinely exhausted does it fail, with a message naming
-exactly what's missing to unlock the remaining fallbacks. No fake/placeholder imagery
-is ever substituted silently — every photo in the final post is real (the trend's own,
-or a real Unsplash photo) or explicitly AI-generated (and labelled as such via
-`photoSource` in the response / shown in the Auto Post panel).
+exactly what's missing to unlock the remaining fallbacks (in practice, since Pollinations
+needs no setup, this basically only happens if Pollinations itself is temporarily down and
+nothing else is configured). No fake/placeholder imagery is ever substituted silently —
+every photo in the final post is real (the trend's own, or a real Unsplash/Pexels photo)
+or explicitly AI-generated (and labelled as such via `photoSource` in the response / shown
+in the Auto Post panel).
 
 This is the default tab whenever you open a trend in the dashboard — the "Compare
 captions" and "Manual template" tabs (multi-provider caption comparison, and the full
