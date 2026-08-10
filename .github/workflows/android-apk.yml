@@ -1,10 +1,13 @@
 name: Build Android APK
 
-# Builds the TrendPosT Android app (client/android/) into a debug .apk and
-# uploads it as a workflow artifact. Runs on every push that touches the
-# client, and on demand from the Actions tab (workflow_dispatch) — this
-# sandbox has no network access to Google's Android SDK servers, so this
-# is where the actual .apk gets produced, not locally in development.
+# Builds the TrendPosT Android app (client/android/) into a debug .apk,
+# publishes it as a workflow artifact, AND attaches it to a rolling GitHub
+# Release ("android-apk-latest") — the release asset, not the workflow
+# artifact, is the reliable way to actually retrieve the file afterward
+# (workflow artifacts are served from Actions' Azure blob storage, which
+# some network policies block; release assets are served from github.com/
+# objects.githubusercontent.com instead). Runs on every push that touches
+# the client, and on demand from the Actions tab (workflow_dispatch).
 on:
   push:
     branches: [main, master, "claude/**"]
@@ -12,6 +15,9 @@ on:
       - "client/**"
       - ".github/workflows/android-apk.yml"
   workflow_dispatch: {}
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -46,9 +52,25 @@ jobs:
         working-directory: client/android
         run: ./gradlew assembleDebug --no-daemon
 
-      - name: Upload APK
+      - name: Upload APK (workflow artifact)
         uses: actions/upload-artifact@v4
         with:
           name: trendpost-debug-apk
           path: client/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+      - name: Publish APK to a rolling release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk /tmp/trendpost-debug.apk
+          if gh release view android-apk-latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release delete-asset android-apk-latest trendpost-debug.apk --repo "$GITHUB_REPOSITORY" --yes || true
+            gh release upload android-apk-latest /tmp/trendpost-debug.apk#trendpost-debug.apk --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create android-apk-latest /tmp/trendpost-debug.apk#trendpost-debug.apk \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "TrendPosT Android (debug build)" \
+              --notes "Automated debug APK build from commit ${{ github.sha }}. Always the latest push to client/. Unsigned debug build — enable 'install from unknown sources' to sideload." \
+              --prerelease
+          fi
