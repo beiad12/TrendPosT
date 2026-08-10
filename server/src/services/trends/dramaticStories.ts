@@ -1,6 +1,5 @@
-import { PROVIDERS_CONFIG } from "./config.js";
 import { cleanUrl, stableIdFromUrl } from "./normalize.js";
-import { fetchSubredditListing, extractRedditImage, type RedditPost } from "./providers/redditClient.js";
+import { fetchSubredditListingAuto, extractRedditImage, type RedditPost } from "./providers/redditClient.js";
 import type { NormalizedTrend, ScoreBreakdown } from "./types.js";
 
 /**
@@ -90,7 +89,11 @@ export interface DramaticStoriesResult {
   generatedAt: string;
   configured: boolean;
   reason?: string;
+  /** true when this result came from Reddit's public unauthenticated endpoint (no REDDIT_CLIENT_ID/SECRET set) rather than the OAuth API. */
+  usingFallback: boolean;
 }
+
+const usingOAuth = () => Boolean(process.env.REDDIT_CLIENT_ID && process.env.REDDIT_CLIENT_SECRET);
 
 /**
  * Worldwide feed of real, dramatic, story-shaped Reddit posts — deliberately
@@ -98,24 +101,30 @@ export interface DramaticStoriesResult {
  * moroccoRelevance weighting, no clustering across outlets (each post is
  * already a self-contained story), just "what's actually blowing up on
  * Reddit's real-story subs right now", ranked by Reddit's own engagement.
+ *
+ * Works with zero setup: when REDDIT_CLIENT_ID/SECRET aren't configured,
+ * every fetch automatically falls back to Reddit's public unauthenticated
+ * JSON endpoint (see providers/redditClient.ts#fetchSubredditListingAuto)
+ * instead of requiring a Reddit developer app up front — `configured` only
+ * goes false if that best-effort path also comes back completely empty.
  */
 export async function getDramaticStories(forceRefresh = false): Promise<DramaticStoriesResult> {
-  if (!PROVIDERS_CONFIG.reddit.enabled) {
-    return { stories: [], generatedAt: new Date().toISOString(), configured: false, reason: PROVIDERS_CONFIG.reddit.reason };
-  }
+  const usingFallback = !usingOAuth();
 
   if (!forceRefresh && cache && Date.now() - cache.at < CACHE_TTL_MS) {
-    return { stories: cache.stories, generatedAt: new Date(cache.at).toISOString(), configured: true };
+    return { stories: cache.stories, generatedAt: new Date(cache.at).toISOString(), configured: true, usingFallback };
   }
 
   const results = await Promise.allSettled(
-    DRAMATIC_STORY_SOURCES.map((source) => fetchSubredditListing(source.subreddit, "hot", 15).then((posts) => ({ source, posts })))
+    DRAMATIC_STORY_SOURCES.map((source) => fetchSubredditListingAuto(source.subreddit, "hot", 15).then((posts) => ({ source, posts })))
   );
 
   const stories: NormalizedTrend[] = [];
   const seen = new Set<string>();
+  let failedAll = true;
   for (const r of results) {
     if (r.status !== "fulfilled") continue;
+    failedAll = false;
     for (const post of r.value.posts) {
       const normalized = toNormalizedStory(post, r.value.source);
       if (!normalized || seen.has(normalized.id)) continue;
@@ -125,6 +134,18 @@ export async function getDramaticStories(forceRefresh = false): Promise<Dramatic
   }
   stories.sort((a, b) => b.score - a.score);
 
+  if (failedAll) {
+    return {
+      stories: [],
+      generatedAt: new Date().toISOString(),
+      configured: false,
+      usingFallback,
+      reason: usingFallback
+        ? "Reddit's public endpoint didn't respond (it can rate-limit or block unauthenticated access without notice) — add REDDIT_CLIENT_ID/SECRET for reliable access, or try Refresh again shortly."
+        : "Every configured subreddit fetch failed — check the Reddit API credentials and try Refresh.",
+    };
+  }
+
   cache = { at: Date.now(), stories };
-  return { stories, generatedAt: new Date(cache.at).toISOString(), configured: true };
+  return { stories, generatedAt: new Date(cache.at).toISOString(), configured: true, usingFallback };
 }

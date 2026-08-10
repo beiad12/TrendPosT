@@ -243,7 +243,7 @@ export const api = {
     countries: () => request<{ countries: CountryOption[] }>("/trends/countries"),
     categories: () => request<{ categories: CategoryOption[] }>("/trends/categories"),
     dramaticStories: (refresh?: boolean) =>
-      request<{ stories: Trend[]; generatedAt: string; configured: boolean; reason?: string }>(
+      request<{ stories: Trend[]; generatedAt: string; configured: boolean; usingFallback: boolean; reason?: string }>(
         `/trends/dramatic-stories${refresh ? "?refresh=1" : ""}`
       ),
   },

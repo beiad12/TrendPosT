@@ -20,6 +20,7 @@ function ageLabel(minutes: number): string {
 export default function DramaticStories() {
   const [stories, setStories] = useState<Trend[]>([]);
   const [configured, setConfigured] = useState(true);
+  const [usingFallback, setUsingFallback] = useState(false);
   const [reason, setReason] = useState<string | undefined>();
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -33,6 +34,7 @@ export default function DramaticStories() {
       const res = await api.trends.dramaticStories(refresh);
       setStories(res.stories);
       setConfigured(res.configured);
+      setUsingFallback(res.usingFallback);
       setReason(res.reason);
       setGeneratedAt(res.generatedAt);
     } catch (e: any) {
@@ -73,8 +75,16 @@ export default function DramaticStories() {
 
       {!configured && (
         <div className="bg-amber-950/40 border border-amber-800 text-amber-300 rounded-md p-3 text-sm mb-4">
-          Reddit isn't configured yet — {reason ?? "add REDDIT_CLIENT_ID + REDDIT_CLIENT_SECRET to the server"}.
-          Reddit is currently the only source this feed pulls real stories from.
+          {reason ?? "Couldn't reach Reddit right now."} Reddit is currently the only source this feed pulls real stories
+          from.
+        </div>
+      )}
+
+      {configured && usingFallback && (
+        <div className="bg-neutral-900 border border-neutral-800 text-neutral-400 rounded-md p-2.5 text-xs mb-4">
+          Using Reddit's public feed (no API key needed) — this can occasionally rate-limit. Add{" "}
+          <code className="text-neutral-300">REDDIT_CLIENT_ID</code> + <code className="text-neutral-300">REDDIT_CLIENT_SECRET</code>{" "}
+          in Settings for a more reliable connection, but it's entirely optional.
         </div>
       )}
 

@@ -53,7 +53,7 @@ export async function getRedditAccessToken(): Promise<string> {
   return cachedToken.token;
 }
 
-/** Fetches one subreddit listing (e.g. "hot", "top?t=day") as raw Reddit post objects. */
+/** Fetches one subreddit listing (e.g. "hot", "top?t=day") as raw Reddit post objects via the OAuth API. */
 export async function fetchSubredditListing(subreddit: string, listing = "hot", limit = 25): Promise<RedditPost[]> {
   const token = await getRedditAccessToken();
   const resp = await fetch(`https://oauth.reddit.com/r/${subreddit}/${listing}?limit=${limit}`, {
@@ -62,6 +62,44 @@ export async function fetchSubredditListing(subreddit: string, listing = "hot", 
   if (!resp.ok) throw new Error(`r/${subreddit} fetch failed (${resp.status})`);
   const body = (await resp.json()) as { data?: { children?: { data: RedditPost }[] } };
   return body.data?.children?.map((c) => c.data) ?? [];
+}
+
+/**
+ * Fetches one subreddit listing via Reddit's plain, unauthenticated
+ * `www.reddit.com/r/x/hot.json` endpoint — no app registration, no
+ * REDDIT_CLIENT_ID/SECRET required. This is the endpoint Reddit itself
+ * serves to a logged-out browser tab; a real desktop-browser User-Agent
+ * (not a bot-labeled one) gets through in most deployments. It's
+ * unofficial and best-effort — Reddit can rate-limit or block it without
+ * notice — so callers should treat a failure here as "try again later",
+ * not a hard configuration error the way a missing OAuth app is.
+ */
+export async function fetchSubredditListingPublic(subreddit: string, listing = "hot", limit = 25): Promise<RedditPost[]> {
+  const resp = await fetch(`https://www.reddit.com/r/${subreddit}/${listing}.json?limit=${limit}&raw_json=1`, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+      Accept: "application/json",
+    },
+  });
+  if (!resp.ok) throw new Error(`r/${subreddit} public fetch failed (${resp.status})`);
+  const body = (await resp.json()) as { data?: { children?: { data: RedditPost }[] } };
+  return body.data?.children?.map((c) => c.data) ?? [];
+}
+
+/**
+ * Fetches a subreddit listing using whichever access method is available:
+ * the OAuth API when REDDIT_CLIENT_ID/SECRET are configured (reliable,
+ * officially supported), otherwise the public unauthenticated endpoint
+ * above (best-effort, no setup required). Lets a feature that just wants
+ * "some Reddit posts" work out of the box while the main news engine's
+ * Reddit provider (reddit.ts) still requires the real OAuth app for its
+ * higher-volume, health-tracked usage.
+ */
+export async function fetchSubredditListingAuto(subreddit: string, listing = "hot", limit = 25): Promise<RedditPost[]> {
+  if (process.env.REDDIT_CLIENT_ID && process.env.REDDIT_CLIENT_SECRET) {
+    return fetchSubredditListing(subreddit, listing, limit);
+  }
+  return fetchSubredditListingPublic(subreddit, listing, limit);
 }
 
 export function extractRedditImage(post: RedditPost): string | null {

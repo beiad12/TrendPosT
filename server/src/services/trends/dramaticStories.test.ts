@@ -1,6 +1,21 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-describe("getDramaticStories — not configured", () => {
+function post(overrides: Record<string, unknown>) {
+  return {
+    title: "A wild story",
+    permalink: "/r/tifu/comments/1/a_wild_story/",
+    url: "https://example.com/x",
+    created_utc: Math.floor(Date.now() / 1000),
+    is_self: true,
+    ups: 100,
+    num_comments: 10,
+    over_18: false,
+    ...overrides,
+  };
+}
+
+describe("getDramaticStories — no Reddit API keys (public-endpoint fallback)", () => {
+  const originalFetch = global.fetch;
   const originalId = process.env.REDDIT_CLIENT_ID;
   const originalSecret = process.env.REDDIT_CLIENT_SECRET;
 
@@ -8,23 +23,45 @@ describe("getDramaticStories — not configured", () => {
     delete process.env.REDDIT_CLIENT_ID;
     delete process.env.REDDIT_CLIENT_SECRET;
     vi.resetModules();
+    global.fetch = vi.fn();
   });
 
   afterEach(() => {
+    global.fetch = originalFetch;
     if (originalId) process.env.REDDIT_CLIENT_ID = originalId;
     if (originalSecret) process.env.REDDIT_CLIENT_SECRET = originalSecret;
   });
 
-  it("returns an empty, non-throwing result with a reason when Reddit isn't configured", async () => {
+  it("works with zero setup — hits Reddit's public unauthenticated .json endpoint, no OAuth token request", async () => {
+    (global.fetch as any).mockImplementation(async (url: string) => {
+      expect(String(url)).not.toContain("access_token");
+      expect(String(url)).not.toContain("oauth.reddit.com");
+      if (String(url).includes("/r/tifu/")) {
+        return { ok: true, status: 200, json: async () => ({ data: { children: [{ data: post({}) }] } }) };
+      }
+      return { ok: true, status: 200, json: async () => ({ data: { children: [] } }) };
+    });
+
+    const { getDramaticStories } = await import("./dramaticStories.js");
+    const result = await getDramaticStories();
+    expect(result.configured).toBe(true);
+    expect(result.usingFallback).toBe(true);
+    expect(result.stories.length).toBeGreaterThan(0);
+  });
+
+  it("reports configured=false only when the public fallback also comes back empty everywhere", async () => {
+    (global.fetch as any).mockImplementation(async () => ({ ok: false, status: 429, json: async () => ({}) }));
+
     const { getDramaticStories } = await import("./dramaticStories.js");
     const result = await getDramaticStories();
     expect(result.configured).toBe(false);
+    expect(result.usingFallback).toBe(true);
     expect(result.stories).toEqual([]);
     expect(result.reason).toContain("REDDIT_CLIENT_ID");
   });
 });
 
-describe("getDramaticStories — configured", () => {
+describe("getDramaticStories — configured with a real Reddit API app", () => {
   const originalFetch = global.fetch;
 
   beforeEach(() => {
@@ -40,21 +77,7 @@ describe("getDramaticStories — configured", () => {
     delete process.env.REDDIT_CLIENT_SECRET;
   });
 
-  function post(overrides: Record<string, unknown>) {
-    return {
-      title: "A wild story",
-      permalink: "/r/tifu/comments/1/a_wild_story/",
-      url: "https://example.com/x",
-      created_utc: Math.floor(Date.now() / 1000),
-      is_self: true,
-      ups: 100,
-      num_comments: 10,
-      over_18: false,
-      ...overrides,
-    };
-  }
-
-  it("fetches every curated subreddit, normalizes posts, and ranks by engagement score", async () => {
+  it("fetches every curated subreddit via OAuth, normalizes posts, and ranks by engagement score", async () => {
     (global.fetch as any).mockImplementation(async (url: string) => {
       if (String(url).includes("access_token")) {
         return { ok: true, status: 200, json: async () => ({ access_token: "tok", expires_in: 3600 }) };
@@ -87,6 +110,7 @@ describe("getDramaticStories — configured", () => {
     const { getDramaticStories } = await import("./dramaticStories.js");
     const result = await getDramaticStories();
     expect(result.configured).toBe(true);
+    expect(result.usingFallback).toBe(false);
     expect(result.stories.length).toBeGreaterThanOrEqual(2);
     // Higher engagement should rank first.
     expect(result.stories[0].title).toBe("High engagement");
