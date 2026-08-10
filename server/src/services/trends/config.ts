@@ -114,26 +114,41 @@ export const KNOWN_MOROCCAN_PUBLISHERS = [
 
 export interface CategoryDef {
   key: string;
-  label: string;
+  label: string; // Arabic
+  labelEn: string; // English/French display label
   emoji: string;
   keywords: RegExp;
   /** 0..1 — how strongly this category itself signals "worth posting" (feeds the small category component of the score). */
   importance: number;
 }
 
-/** The 11 dashboard categories, classified by keyword match against title+description. Order matters — first match wins, so put more specific categories first. */
+/**
+ * The dashboard's category taxonomy, classified by keyword match against
+ * title+description. Order matters — first match wins, so more specific
+ * categories are checked before broad catch-alls. `viral` is special: it's
+ * primarily assigned by source (a Reddit-sourced story — see
+ * scoring.ts#classifyCategory's `preferViral` flag), with these keywords
+ * as a fallback for non-Reddit "this is explicitly described as viral"
+ * stories.
+ */
 export const CATEGORIES: CategoryDef[] = [
-  { key: "breaking", label: "عاجل", emoji: "🔥", importance: 1, keywords: /(عاجل|breaking|urgent|dernière minute)/i },
-  { key: "incidents", label: "حوادث", emoji: "🚨", importance: 0.85, keywords: /(حادث|حادثة|وفاة|جريمة|اعتقال|accident|crime|meurtre|arrestation|incendie|drame)/i },
-  { key: "weather", label: "طقس", emoji: "🌦️", importance: 0.7, keywords: /(طقس|أمطار|فيضانات|زلزال|météo|pluie|inondation|séisme|tempête|canicule)/i },
-  { key: "sports", label: "الرياضة", emoji: "⚽", importance: 0.9, keywords: /(رياضة|كرة القدم|مباراة|منتخب|فريق|sport|football|match|équipe|championnat)/i },
-  { key: "entertainment", label: "فن ومشاهير", emoji: "🎭", importance: 0.8, keywords: /(فنان|فنانة|مشهور|نجم|مسلسل|فيلم|célébrité|artiste|star|film|série)/i },
-  { key: "economy", label: "اقتصاد", emoji: "💰", importance: 0.6, keywords: /(اقتصاد|بورصة|استثمار|ميزانية|économie|bourse|investissement|budget|prix|inflation)/i },
-  { key: "technology", label: "تكنولوجيا", emoji: "💻", importance: 0.55, keywords: /(تكنولوجيا|تقنية|ذكاء اصطناعي|technologie|application|intelligence artificielle|numérique)/i },
-  { key: "development", label: "مشاريع وتنمية", emoji: "🏗️", importance: 0.65, keywords: /(مشروع|بنية تحتية|تنمية|projet|infrastructure|développement|inauguration|chantier)/i },
-  { key: "society", label: "مجتمع", emoji: "❤️", importance: 0.5, keywords: /(مجتمع|تعليم|صحة|société|éducation|santé|social)/i },
-  { key: "world", label: "العالم", emoji: "🌍", importance: 0.4, keywords: /(العالم|دولي|international|monde|étranger)/i },
-  { key: "morocco", label: "المغرب", emoji: "🇲🇦", importance: 0.6, keywords: /./ }, // catch-all default
+  { key: "breaking", label: "عاجل", labelEn: "Breaking", emoji: "🔥", importance: 1, keywords: /(عاجل|breaking|urgent|dernière minute)/i },
+  { key: "incidents", label: "حوادث", labelEn: "Incidents", emoji: "🚨", importance: 0.85, keywords: /(حادث|حادثة|وفاة|جريمة|اعتقال|accident|crime|meurtre|arrestation|incendie|drame)/i },
+  { key: "military", label: "عسكري", labelEn: "Military", emoji: "🎖️", importance: 0.8, keywords: /(عسكري|جيش|قوات|صواريخ|حرب|غزو|militaire|armée|guerre|missile|troops|military|invasion|conflit armé)/i },
+  { key: "weather", label: "طقس", labelEn: "Weather", emoji: "🌦️", importance: 0.7, keywords: /(طقس|أمطار|فيضانات|زلزال|météo|pluie|inondation|séisme|tempête|canicule)/i },
+  { key: "politics", label: "سياسة", labelEn: "Politics", emoji: "🏛️", importance: 0.65, keywords: /(سياسة|حكومة|وزير|برلمان|انتخابات|رئيس|politique|gouvernement|ministre|parlement|élections|president|président)/i },
+  { key: "sports", label: "الرياضة", labelEn: "Sports", emoji: "⚽", importance: 0.9, keywords: /(رياضة|كرة القدم|مباراة|منتخب|فريق|sport|football|match|équipe|championnat)/i },
+  { key: "celebrity", label: "مشاهير", labelEn: "Celebrity", emoji: "🌟", importance: 0.75, keywords: /(مشهور|نجم|مشاهير|فضيحة نجم|celebrity|célébrité|famous|paparazzi)/i },
+  { key: "entertainment", label: "فن وترفيه", labelEn: "Entertainment", emoji: "🎭", importance: 0.7, keywords: /(فنان|فنانة|مسلسل|فيلم|أغنية|artiste|film|série|chanson|concert)/i },
+  { key: "viral", label: "فيروسي", labelEn: "Viral & Reddit", emoji: "🐸", importance: 0.7, keywords: /(فيروسي|منتشر|تريند|viral|buzz|tendance|trending|meme|ميم)/i },
+  { key: "life-stories", label: "قصص حياة", labelEn: "Life Stories", emoji: "📖", importance: 0.6, keywords: /(قصة ملهمة|قصة مؤثرة|قصة إنسانية|touching story|inspiring story|human interest|histoire inspirante|survivor story|miracle story)/i },
+  { key: "economy", label: "اقتصاد", labelEn: "Economy", emoji: "💰", importance: 0.6, keywords: /(اقتصاد|بورصة|استثمار|ميزانية|économie|bourse|investissement|budget|prix|inflation)/i },
+  { key: "health", label: "صحة", labelEn: "Health", emoji: "🏥", importance: 0.6, keywords: /(صحة|علاج|مرض|طبي|وباء|santé|maladie|traitement|médical|épidémie)/i },
+  { key: "technology", label: "تكنولوجيا", labelEn: "Technology", emoji: "💻", importance: 0.55, keywords: /(تكنولوجيا|تقنية|ذكاء اصطناعي|technologie|application|intelligence artificielle|numérique)/i },
+  { key: "development", label: "مشاريع وتنمية", labelEn: "Development", emoji: "🏗️", importance: 0.65, keywords: /(مشروع|بنية تحتية|تنمية|projet|infrastructure|développement|inauguration|chantier)/i },
+  { key: "society", label: "مجتمع", labelEn: "Society", emoji: "❤️", importance: 0.5, keywords: /(مجتمع|تعليم|société|éducation|social)/i },
+  { key: "world", label: "العالم", labelEn: "World", emoji: "🌍", importance: 0.4, keywords: /(العالم|دولي|international|monde|étranger)/i },
+  { key: "morocco", label: "عام", labelEn: "General", emoji: "📰", importance: 0.6, keywords: /./ }, // catch-all default (key kept for backward compat with existing filters/tests)
 ];
 
 /** Viral-potential signal categories — mirrors what actually spreads on Facebook, weighted by strength. */

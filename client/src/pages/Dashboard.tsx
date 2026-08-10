@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, Trend, TrendType, ProviderHealth } from "../lib/api.js";
+import { api, CategoryOption, Trend, TrendType, ProviderHealth } from "../lib/api.js";
 import ScoreBadge from "../components/ScoreBadge.js";
 import SourceHealthPanel from "../components/SourceHealthPanel.js";
 import TrendDetailModal from "../components/TrendDetailModal.js";
@@ -27,6 +27,8 @@ const WARNING_MESSAGE: Record<string, string> = {
 
 export default function Dashboard() {
   const [country, setCountry] = useState("MA");
+  const [category, setCategory] = useState<string | undefined>();
+  const [categories, setCategories] = useState<CategoryOption[]>([]);
   const [showMap, setShowMap] = useState(false);
   const [trends, setTrends] = useState<Trend[]>([]);
   const [sourceHealth, setSourceHealth] = useState<ProviderHealth[]>([]);
@@ -36,11 +38,11 @@ export default function Dashboard() {
   const [selected, setSelected] = useState<Trend | null>(null);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
 
-  async function load(refresh = false, countryCode = country) {
+  async function load(refresh = false) {
     setLoading(true);
     setError(null);
     try {
-      const res = refresh ? await api.trends.refresh(countryCode) : await api.trends.list({ country: countryCode });
+      const res = refresh ? await api.trends.refresh(country) : await api.trends.list({ country, category });
       setTrends(res.trends);
       setSourceHealth(res.sourceHealth);
       setWarning(res.warning);
@@ -53,9 +55,13 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
-    load(false, country);
+    api.trends.categories().then((r) => setCategories(r.categories));
+  }, []);
+
+  useEffect(() => {
+    load(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [country]);
+  }, [country, category]);
 
   return (
     <div>
@@ -91,6 +97,32 @@ export default function Dashboard() {
         </div>
       )}
 
+      <div className="flex flex-wrap gap-1.5 mb-4">
+        <button
+          onClick={() => setCategory(undefined)}
+          className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+            !category
+              ? "bg-maroc-red border-maroc-red text-white"
+              : "bg-neutral-900 border-neutral-800 text-neutral-400 hover:text-white hover:border-neutral-700"
+          }`}
+        >
+          All
+        </button>
+        {categories.map((c) => (
+          <button
+            key={c.key}
+            onClick={() => setCategory(c.key === category ? undefined : c.key)}
+            className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+              category === c.key
+                ? "bg-maroc-red border-maroc-red text-white"
+                : "bg-neutral-900 border-neutral-800 text-neutral-400 hover:text-white hover:border-neutral-700"
+            }`}
+          >
+            {c.emoji} {c.labelEn}
+          </button>
+        ))}
+      </div>
+
       <SourceHealthPanel sources={sourceHealth} />
 
       {error && (
@@ -111,7 +143,11 @@ export default function Dashboard() {
           <br />
           لا توجد بيانات كافية حالياً.
           <br />
-          <span className="text-xs">Check "Trend sources" above for why — it names exactly which source is down.</span>
+          <span className="text-xs">
+            {category
+              ? "Try a different category, or check \"Trend sources\" above."
+              : "Check \"Trend sources\" above for why — it names exactly which source is down."}
+          </span>
         </div>
       )}
 

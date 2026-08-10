@@ -65,6 +65,13 @@ export interface CountryOption {
   language: string;
 }
 
+export interface CategoryOption {
+  key: string;
+  label: string;
+  labelEn: string;
+  emoji: string;
+}
+
 export type Provider = "anthropic" | "openai" | "mistral" | "google" | "xai";
 
 export const PROVIDER_LABELS: Record<Provider, string> = {
@@ -231,6 +238,7 @@ export const api = {
     refresh: (country?: string) =>
       request<TrendsResponse>(`/trends/refresh${country ? `?country=${country}` : ""}`, { method: "POST" }),
     countries: () => request<{ countries: CountryOption[] }>("/trends/countries"),
+    categories: () => request<{ categories: CategoryOption[] }>("/trends/categories"),
   },
   settings: {
     listKeys: () => request<{ providers: ProviderStatus[] }>("/settings/keys"),

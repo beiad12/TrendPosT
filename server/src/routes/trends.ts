@@ -2,6 +2,7 @@ import { Router } from "express";
 import { getTrends, refreshTrends, getTrendsForCountry, refreshTrendsForCountry } from "../services/trends/engine.js";
 import { toNormalizedTrend } from "../services/trends/trendMapper.js";
 import { COUNTRIES, getCountry } from "../services/trends/countries.js";
+import { CATEGORIES } from "../services/trends/config.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import type { TrendEngineResult } from "../services/trends/engine.js";
 
@@ -17,6 +18,17 @@ export const trendsRouter = Router();
 trendsRouter.get("/countries", (_req, res) => {
   res.json({
     countries: COUNTRIES.map((c) => ({ code: c.code, name: c.name, mapName: c.mapName, language: c.language })),
+  });
+});
+
+/**
+ * GET /api/trends/categories
+ * The full category list the dashboard's filter chips render from — key
+ * (what to pass back as ?category=), bilingual label, and emoji.
+ */
+trendsRouter.get("/categories", (_req, res) => {
+  res.json({
+    categories: CATEGORIES.map((c) => ({ key: c.key, label: c.label, labelEn: c.labelEn, emoji: c.emoji })),
   });
 });
 

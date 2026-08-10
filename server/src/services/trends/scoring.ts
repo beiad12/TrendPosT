@@ -76,11 +76,28 @@ function socialFactor(articles: { provider: string }[]): number {
   return articles.some((a) => a.provider.startsWith("reddit:")) ? 1.0 : 0.3;
 }
 
-function classifyCategory(text: string) {
+/** Weak, generic buckets a Reddit-sourced story would otherwise fall into if nothing more specific matches — better surfaced under "viral" (spec ask: a filterable "reddit stories" category) than lost in a catch-all. */
+const WEAK_CATCHALL_KEYS = new Set(["economy", "development", "society", "world", "morocco"]);
+
+/**
+ * `preferViral` is true for Reddit-sourced clusters: a Reddit post about
+ * sports/celebrity/politics/etc. still gets that specific category (it's
+ * more useful filtered there), but anything that would otherwise land in a
+ * weak generic bucket surfaces under "viral & reddit" instead — since
+ * being Reddit-sourced already *is* the interesting signal for those.
+ */
+function classifyCategory(text: string, preferViral: boolean) {
+  const viralCategory = CATEGORIES.find((c) => c.key === "viral")!;
+
   for (const cat of CATEGORIES) {
-    if (cat.key === "morocco") continue; // catch-all, checked last
+    if (cat.key === "morocco" || cat.key === "viral") continue; // handled explicitly below
+    if (preferViral && WEAK_CATCHALL_KEYS.has(cat.key)) continue;
     if (cat.keywords.test(text)) return cat;
   }
+
+  if (preferViral) return viralCategory;
+  if (viralCategory.keywords.test(text)) return viralCategory;
+
   return CATEGORIES.find((c) => c.key === "morocco")!;
 }
 
@@ -121,7 +138,8 @@ export function scoreCluster(cluster: UnscoredCluster, now: Date = new Date(), r
   const { velocityPerHour, factor: velocityFactorValue } = velocity(cluster.articles, nowMs);
   const isAccelerating = velocityFactorValue > 0.5;
 
-  const category = classifyCategory(text);
+  const preferViral = cluster.articles.some((a) => a.provider.startsWith("reddit:"));
+  const category = classifyCategory(text, preferViral);
 
   const breakdown: ScoreBreakdown = {
     freshness: Math.round(freshnessFactor(ageMinutes, isAccelerating) * SCORE_WEIGHTS.freshness),

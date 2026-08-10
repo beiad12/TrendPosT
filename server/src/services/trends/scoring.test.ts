@@ -132,10 +132,42 @@ describe("scoreCluster — category classification", () => {
     expect(scored.categoryKey).toBe("sports");
   });
 
-  it("falls back to the 'morocco' catch-all category", () => {
+  it("falls back to the 'morocco' catch-all category when nothing more specific matches", () => {
     const now = new Date();
-    const scored = scoreCluster(cluster({ title: "Le ministre reçoit une délégation" }), now);
+    const scored = scoreCluster(cluster({ title: "Une réunion s'est tenue mardi dans la capitale" }), now);
     expect(scored.categoryKey).toBe("morocco");
+  });
+
+  it("classifies a government/minister headline as 'politics'", () => {
+    const now = new Date();
+    const scored = scoreCluster(cluster({ title: "Le ministre reçoit une délégation étrangère" }), now);
+    expect(scored.categoryKey).toBe("politics");
+  });
+
+  it("classifies an army/conflict headline as 'military'", () => {
+    const now = new Date();
+    const scored = scoreCluster(cluster({ title: "L'armée annonce une nouvelle opération militaire" }), now);
+    expect(scored.categoryKey).toBe("military");
+  });
+
+  it("classifies a celebrity-gossip headline as 'celebrity'", () => {
+    const now = new Date();
+    const scored = scoreCluster(cluster({ title: "Cette célébrité fait sensation avec sa nouvelle apparition" }), now);
+    expect(scored.categoryKey).toBe("celebrity");
+  });
+
+  it("classifies a Reddit-sourced story with no specific category match as 'viral', not the weak generic catch-all", () => {
+    const now = new Date();
+    const articles = [article({ provider: "reddit:popular", title: "Something unusual is happening" })];
+    const scored = scoreCluster(cluster({ title: "Something unusual is happening", articles }, articles), now);
+    expect(scored.categoryKey).toBe("viral");
+  });
+
+  it("still classifies a Reddit-sourced sports story as 'sports', not 'viral'", () => {
+    const now = new Date();
+    const articles = [article({ provider: "reddit:popular", title: "Incredible football match ends in a dramatic finish" })];
+    const scored = scoreCluster(cluster({ title: "Incredible football match ends in a dramatic finish", articles }, articles), now);
+    expect(scored.categoryKey).toBe("sports");
   });
 });
 
