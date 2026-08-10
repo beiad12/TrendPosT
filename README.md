@@ -116,10 +116,11 @@ the UI can show an "add your API key" prompt for anything unconfigured.
 
 ### AI Auto Post (`server/src/services/ai/autoPost.ts`)
 
-The one-click pipeline: `POST /api/auto-post` takes `{trend: {..., imageUrl}, provider, language}`
+The one-click pipeline: `POST /api/auto-post` takes `{trend: {..., imageUrl?}, provider, language}`
 and does the rest itself —
 
-1. Fetches the trend's own photo from `trend.imageUrl` server-side (no manual upload).
+1. Resolves a photo for the trend — see "Photo fallback chain" below; `imageUrl` is
+   optional, a missing/unreachable one no longer blocks generation.
 2. Asks the AI for a punchy headline (the same `generateCaptions` call used elsewhere
    also now returns a dedicated `headline` field — see `promptBuilder.ts` — so this
    reuses the existing provider adapters rather than adding a second AI-calling path).
@@ -129,13 +130,39 @@ and does the rest itself —
    system — no template-specific code), headline on top. The headline zone has no
    fixed `align`; the render engine auto-detects the text's script (Arabic → right,
    Latin → left) instead, so the same template works for any language the AI writes in.
-4. Returns the rendered image (base64) together with a full caption + hashtags +
-   suggested post time from the same AI call, in one response.
+4. Returns the rendered image (base64), which fallback the photo actually came from
+   (`photoSource`), and a full caption + hashtags + suggested post time — all in one response.
 
-The photo and text fetches run concurrently (`Promise.allSettled`, not raced) so that
-if both happen to fail, the reported error explains both reasons instead of only
-whichever rejected first. A trend with no captured photo is rejected with a clear
-400 before any AI call is made.
+The photo resolution and caption generation run concurrently (`Promise.allSettled`, not
+raced) so that if both happen to fail, the reported error explains both reasons instead
+of only whichever rejected first.
+
+#### Photo fallback chain (`server/src/services/media/`)
+
+A trend with no photo of its own no longer blocks Auto Post — it falls through a
+real-photo-first chain instead of failing outright:
+
+1. **The trend's own source photo** (`imageUrl`), if it has one and it's still reachable.
+2. **Web image search** (`webImageSearch.ts`) — [Unsplash](https://unsplash.com/developers)
+   (free API key, email signup only). Tries the actual headline first, then falls back to
+   a category-level query (`imagePrompt.ts#buildWebSearchQueries`) — **weather gets its own
+   dedicated query** (`"{headline} weather"`, then `"weather storm sky clouds forecast"`),
+   since a literal news headline rarely matches stock-photo tags the way a descriptive
+   weather query does. Reports as simply unavailable (not an error) without
+   `UNSPLASH_ACCESS_KEY` configured.
+3. **AI-generated imagery** (`aiImageGen.ts`) — OpenAI's Images API (DALL-E 3), reusing
+   whichever OpenAI key is already configured in Settings for captions, independent of
+   which provider you picked for the caption itself. The prompt
+   (`imagePrompt.ts#buildAiImagePrompt`) is category-aware — weather again gets a
+   dedicated "photorealistic press photograph capturing this weather event..." prompt —
+   and explicitly steers away from fabricated readable text/watermarks/logos, a common
+   AI-image artifact that would look wrong on a real post.
+
+Only once every option is genuinely exhausted does it fail, with a message naming
+exactly what's missing to unlock the remaining fallbacks. No fake/placeholder imagery
+is ever substituted silently — every photo in the final post is real (the trend's own,
+or a real Unsplash photo) or explicitly AI-generated (and labelled as such via
+`photoSource` in the response / shown in the Auto Post panel).
 
 This is the default tab whenever you open a trend in the dashboard — the "Compare
 captions" and "Manual template" tabs (multi-provider caption comparison, and the full

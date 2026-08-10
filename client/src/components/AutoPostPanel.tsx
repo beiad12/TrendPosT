@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { api, AutoPostResult, Language, Provider, PROVIDER_LABELS, Trend } from "../lib/api.js";
+import { api, AutoPostResult, Language, PhotoSource, Provider, PROVIDER_LABELS, Trend } from "../lib/api.js";
 
 const LANGUAGES: { value: Language; label: string }[] = [
   { value: "darija", label: "Darija" },
@@ -8,6 +8,12 @@ const LANGUAGES: { value: Language; label: string }[] = [
 ];
 
 const PROVIDERS: Provider[] = ["anthropic", "openai", "mistral", "google", "xai"];
+
+const PHOTO_SOURCE_LABEL: Record<PhotoSource, string> = {
+  provided: "📷 Photo from the trend's own source",
+  "web-search": "🌐 Photo found via web image search",
+  "ai-generated": "🤖 AI-generated photo (no real photo was found)",
+};
 
 function base64ToBlob(base64: string, mime: string): Blob {
   const bytes = atob(base64);
@@ -20,7 +26,10 @@ function base64ToBlob(base64: string, mime: string): Blob {
  * The one-click AI pipeline: trend photo + AI-written headline, rendered
  * together automatically. No manual photo upload, no manual text entry —
  * everything but the template's fixed layout comes from the trend and the
- * AI in a single request.
+ * AI in a single request. When the trend has no photo of its own, the
+ * server tries a web image search, then AI-generates one as a last resort
+ * (see autoPost.ts#resolvePhoto) — so generation is never blocked on a
+ * missing photo, it just tells you afterward where the photo came from.
  */
 export default function AutoPostPanel({ trend }: { trend: Trend }) {
   const [provider, setProvider] = useState<Provider>("anthropic");
@@ -33,10 +42,6 @@ export default function AutoPostPanel({ trend }: { trend: Trend }) {
   const hasPhoto = Boolean(trend.imageUrl);
 
   async function handleGenerate() {
-    if (!trend.imageUrl) {
-      setError("This trend has no photo — pick a trend with one, or use the manual Templates flow.");
-      return;
-    }
     setBusy(true);
     setError(null);
     try {
@@ -70,10 +75,10 @@ export default function AutoPostPanel({ trend }: { trend: Trend }) {
   return (
     <div className="grid md:grid-cols-2 gap-4">
       <div className="space-y-3">
-        {!hasPhoto && (
+        {!hasPhoto && !result && (
           <p className="text-amber-400 text-sm bg-amber-950/40 border border-amber-800 rounded-md p-2.5">
-            This trend has no photo captured from its source — auto post needs one. Try a different
-            trend, or use the manual Templates flow with your own photo.
+            This trend has no photo captured from its source — generating will try a web image search, then
+            AI-generate one if nothing turns up (needs an Unsplash and/or OpenAI key in Settings).
           </p>
         )}
 
@@ -104,7 +109,7 @@ export default function AutoPostPanel({ trend }: { trend: Trend }) {
 
         <button
           onClick={handleGenerate}
-          disabled={busy || !hasPhoto}
+          disabled={busy}
           className="w-full bg-maroc-red hover:bg-red-700 disabled:opacity-50 rounded-md py-2.5 font-medium"
         >
           {busy ? "Generating…" : "✨ Generate AI post (photo + headline)"}
@@ -114,6 +119,7 @@ export default function AutoPostPanel({ trend }: { trend: Trend }) {
 
         {result && (
           <div className="space-y-2 text-sm">
+            <p className="text-xs text-neutral-400">{PHOTO_SOURCE_LABEL[result.photoSource]}</p>
             <div>
               <p className="text-xs uppercase tracking-wide text-neutral-400 mb-1">Caption</p>
               <p className="whitespace-pre-wrap bg-neutral-800/60 rounded-md p-2.5">{result.caption}</p>

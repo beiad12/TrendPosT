@@ -14,7 +14,10 @@ const bodySchema = z.object({
     sourceUrl: z.string().url(),
     source: z.string().min(1),
     category: z.string().optional(),
-    imageUrl: z.string().url({ message: "This trend has no photo — pick one with a photo, or use the manual Templates flow." }),
+    // Optional now: a missing/unreachable photo falls through to a web image
+    // search and then AI generation (see autoPost.ts#resolvePhoto) instead of
+    // failing outright.
+    imageUrl: z.string().url().optional().nullable(),
     score: z.number().optional(),
     sourceCount: z.number().optional(),
     publishedAt: z.string().optional(),
@@ -26,13 +29,15 @@ const bodySchema = z.object({
 
 /**
  * POST /api/auto-post
- * Body: { trend: {..., imageUrl}, provider, language, templateId? }
+ * Body: { trend: {..., imageUrl?}, provider, language, templateId? }
  *
- * The one-click AI pipeline: fetches the trend's own photo, has the AI
- * write a headline for it, and renders them together onto the "photo +
- * headline" template — nothing manual. Returns the caption text/hashtags
- * alongside the rendered image (as base64) so the whole result comes back
- * in a single round trip.
+ * The one-click AI pipeline: resolves a photo for the trend (its own
+ * source photo if it has a reachable one; otherwise a web image search;
+ * otherwise AI-generated as a last resort — see autoPost.ts#resolvePhoto),
+ * has the AI write a headline for it, and renders them together onto the
+ * "photo + headline" template — nothing manual. Returns the caption
+ * text/hashtags, which fallback the photo actually came from
+ * (`photoSource`), and the rendered image (as base64) in one round trip.
  */
 autoPostRouter.post("/", asyncHandler(async (req, res) => {
   const parsed = bodySchema.safeParse(req.body);
@@ -49,6 +54,7 @@ autoPostRouter.post("/", asyncHandler(async (req, res) => {
       suggestedPostTime: result.suggestedPostTime,
       imageBase64: result.image.toString("base64"),
       format: "jpeg",
+      photoSource: result.photoSource,
     });
   } catch (err: any) {
     if (err instanceof ProviderKeyMissingError) {

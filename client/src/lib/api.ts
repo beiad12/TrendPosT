@@ -112,6 +112,8 @@ export interface GenerateResultEntry {
   error?: string;
 }
 
+export type PhotoSource = "provided" | "web-search" | "ai-generated";
+
 export interface AutoPostResult {
   headline: string;
   caption: string;
@@ -119,6 +121,7 @@ export interface AutoPostResult {
   suggestedPostTime?: string;
   imageBase64: string;
   format: "jpeg" | "png";
+  photoSource: PhotoSource;
 }
 
 export interface Rect {
@@ -320,7 +323,7 @@ export const api = {
         sourceUrl: string;
         source: string;
         category?: string;
-        imageUrl: string;
+        imageUrl?: string | null;
         score?: number;
         sourceCount?: number;
         publishedAt?: string;
