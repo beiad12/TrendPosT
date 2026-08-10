@@ -10,7 +10,7 @@ import { renderRouter } from "./routes/render.js";
 import { autoPostRouter } from "./routes/autoPost.js";
 import { brandingRouter } from "./routes/branding.js";
 import { TEMPLATES_DIR, EXPORTS_DIR, UPLOADS_DIR, BRANDING_DIR } from "./middleware/upload.js";
-import { seedMarocViralTemplates, seedPressPosterTemplate } from "./services/seedTemplates.js";
+import { seedMarocViralTemplates, seedPressPosterTemplate, seedDramaticStoryTemplates } from "./services/seedTemplates.js";
 
 const app = express();
 const PORT = Number(process.env.PORT) || 4000;
@@ -48,7 +48,7 @@ process.on("unhandledRejection", (reason) => {
   console.error("Unhandled promise rejection:", reason);
 });
 
-Promise.all([seedMarocViralTemplates(), seedPressPosterTemplate()])
+Promise.all([seedMarocViralTemplates(), seedPressPosterTemplate(), seedDramaticStoryTemplates()])
   .catch((err) => console.error("Failed to seed default templates:", err))
   .finally(() => {
     app.listen(PORT, () => {

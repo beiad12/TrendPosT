@@ -5,6 +5,7 @@ import { db } from "../db/index.js";
 import { TEMPLATES_DIR } from "../middleware/upload.js";
 import { buildMarocViralFrame, marocViralGeometry } from "./render/buildMarocViralFrame.js";
 import { buildPressPosterBackground, pressPosterGeometry } from "./render/buildPressPosterFrame.js";
+import { buildDramaticBackground, dramaticGeometry, DRAMATIC_TEMPLATE_NAME } from "./render/buildDramaticFrame.js";
 import { MAROC_VIRAL_COLORS as C } from "./render/brand.js";
 
 interface Variant {
@@ -102,4 +103,40 @@ export async function seedPressPosterTemplate(): Promise<void> {
   });
 
   console.log(`Seeded template: ${PRESS_POSTER_TEMPLATE_NAME}`);
+}
+
+/**
+ * Idempotently seeds the "Dramatic Story" templates (Arabic + French
+ * variants) — a high-contrast, cinematic poster style (hazard-striped
+ * kicker banner, "EXCLUSIVE" corner ribbon, heavy bottom vignette, huge
+ * bold headline, share-CTA pill) for stories that call for a punchier
+ * treatment than the plain photo+headline default.
+ */
+export async function seedDramaticStoryTemplates(): Promise<void> {
+  for (const language of ["ar", "fr"] as const) {
+    const name = DRAMATIC_TEMPLATE_NAME[language];
+    const existing = db.prepare("SELECT id FROM templates WHERE name = ?").get(name);
+    if (existing) continue;
+
+    const canvas = 1080;
+    const bgBuffer = await buildDramaticBackground(canvas, language);
+    const filename = `dramatic-story-${language}-${randomUUID()}.png`;
+    const filePath = path.join(TEMPLATES_DIR, filename);
+    fs.writeFileSync(filePath, bgBuffer);
+
+    const geo = dramaticGeometry(canvas, language);
+
+    insertTemplate({
+      id: randomUUID(),
+      name,
+      category: "news",
+      base_image_path: filePath,
+      canvas_width: geo.canvas,
+      canvas_height: geo.canvas,
+      zones_json: JSON.stringify(geo.zones),
+      style_json: JSON.stringify({}),
+    });
+
+    console.log(`Seeded template: ${name}`);
+  }
 }

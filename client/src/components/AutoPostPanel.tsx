@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { api, AutoPostResult, Language, PhotoSource, Provider, PROVIDER_LABELS, Trend } from "../lib/api.js";
+import { useEffect, useState } from "react";
+import { api, AutoPostResult, Language, PhotoSource, Provider, PROVIDER_LABELS, Template, Trend } from "../lib/api.js";
 
 const LANGUAGES: { value: Language; label: string }[] = [
   { value: "darija", label: "Darija" },
@@ -8,6 +8,24 @@ const LANGUAGES: { value: Language; label: string }[] = [
 ];
 
 const PROVIDERS: Provider[] = ["anthropic", "openai", "mistral", "google", "xai"];
+
+type Style = "standard" | "dramatic";
+
+/**
+ * Template names the seeded "Dramatic Story" templates are inserted under
+ * (see server/src/services/render/buildDramaticFrame.ts). Matched against
+ * the fetched template list by name rather than a hardcoded id, since ids
+ * are only assigned at seed time.
+ */
+const DRAMATIC_TEMPLATE_NAME: Record<"ar" | "fr", string> = {
+  ar: "Dramatic Story — قصة مثيرة (عربي)",
+  fr: "Dramatic Story — Histoire Choc (Français)",
+};
+
+/** Darija and MSA both write Arabic script; French is Latin — same split the render engine itself uses. */
+function scriptFor(language: Language): "ar" | "fr" {
+  return language === "french" ? "fr" : "ar";
+}
 
 const PHOTO_SOURCE_LABEL: Record<PhotoSource, string> = {
   provided: "📷 Photo from the trend's own source",
@@ -34,6 +52,8 @@ function base64ToBlob(base64: string, mime: string): Blob {
 export default function AutoPostPanel({ trend }: { trend: Trend }) {
   const [provider, setProvider] = useState<Provider>("anthropic");
   const [language, setLanguage] = useState<Language>("french");
+  const [style, setStyle] = useState<Style>("standard");
+  const [templates, setTemplates] = useState<Template[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AutoPostResult | null>(null);
@@ -41,10 +61,19 @@ export default function AutoPostPanel({ trend }: { trend: Trend }) {
 
   const hasPhoto = Boolean(trend.imageUrl);
 
+  useEffect(() => {
+    api.templates.list().then((r) => setTemplates(r.templates)).catch(() => {});
+  }, []);
+
   async function handleGenerate() {
     setBusy(true);
     setError(null);
     try {
+      const dramaticTemplateId =
+        style === "dramatic"
+          ? templates.find((t) => t.name === DRAMATIC_TEMPLATE_NAME[scriptFor(language)])?.id
+          : undefined;
+
       const res = await api.autoPost.generate({
         trend: {
           title: trend.title,
@@ -58,6 +87,7 @@ export default function AutoPostPanel({ trend }: { trend: Trend }) {
         },
         provider,
         language,
+        templateId: dramaticTemplateId,
       });
       setResult(res);
       setImageUrl(URL.createObjectURL(base64ToBlob(res.imageBase64, `image/${res.format}`)));
@@ -105,6 +135,33 @@ export default function AutoPostPanel({ trend }: { trend: Trend }) {
               </option>
             ))}
           </select>
+        </div>
+
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setStyle("standard")}
+            className={`flex-1 rounded-md border px-3 py-2 text-sm text-left transition ${
+              style === "standard"
+                ? "border-maroc-red bg-neutral-800"
+                : "border-neutral-700 bg-neutral-800/40 text-neutral-400 hover:text-white"
+            }`}
+          >
+            <span className="block font-medium">📰 Standard</span>
+            <span className="block text-xs opacity-75">Full photo + clean headline</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setStyle("dramatic")}
+            className={`flex-1 rounded-md border px-3 py-2 text-sm text-left transition ${
+              style === "dramatic"
+                ? "border-maroc-red bg-neutral-800"
+                : "border-neutral-700 bg-neutral-800/40 text-neutral-400 hover:text-white"
+            }`}
+          >
+            <span className="block font-medium">🎬 Dramatic Story</span>
+            <span className="block text-xs opacity-75">Kicker banner + heavy vignette + share CTA</span>
+          </button>
         </div>
 
         <button
